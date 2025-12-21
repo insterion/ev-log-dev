@@ -1,4 +1,4 @@
-// app.js – main wiring for EV Log (dev version)
+// app.js – main wiring for EV Log (dev version with "applies to" for costs)
 
 (function () {
   const D = window.EVData;
@@ -10,6 +10,24 @@
   const state = D.loadState();
   let currentEditId = null;      // charging entry id being edited
   let currentEditCostId = null;  // cost id being edited
+
+  // ---------- normalise existing costs (backwards compatibility) ----------
+
+  function ensureCostAppliesDefaults() {
+    if (!Array.isArray(state.costs)) return;
+    for (const c of state.costs) {
+      if (!c) continue;
+      if (!c.applies) {
+        // старите записи по подразбиране ги броим като EV
+        c.applies = "ev";
+      } else {
+        // нормализираме към малки букви
+        c.applies = String(c.applies).toLowerCase();
+      }
+    }
+  }
+
+  ensureCostAppliesDefaults();
 
   // ---------- tabs ----------
 
@@ -139,12 +157,32 @@
     $("c_amount").value = cost.amount;
     $("c_note").value = cost.note || "";
 
+    const appliesSelect = $("c_applies");
+    if (appliesSelect) {
+      const v = (cost.applies || "ev").toLowerCase();
+      if (v === "ev" || v === "ice" || v === "both" || v === "other") {
+        appliesSelect.value = v;
+      } else {
+        appliesSelect.value = "ev";
+      }
+    }
+
     const btn = $("c_add");
     if (btn) {
       btn.textContent = "Update cost";
     }
 
     U.toast("Editing cost", "info");
+  }
+
+  function getAppliesFromForm() {
+    const el = $("c_applies");
+    if (!el) return "ev";
+    const v = (el.value || "").toLowerCase();
+    if (v === "ev" || v === "ice" || v === "both" || v === "other") {
+      return v;
+    }
+    return "ev";
   }
 
   // ---------- maintenance total from Costs (all-time) ----------
@@ -195,8 +233,8 @@
       const total = computeMaintenanceTotalAllTime();
       let el = $("maintenanceTotalCompare");
       if (!el) {
-        el = document.createElement("p");
         el.id = "maintenanceTotalCompare";
+        el = document.createElement("p");
         el.className = "small";
         el.style.marginTop = "8px";
         container.appendChild(el);
@@ -309,6 +347,7 @@
     const category = $("c_category").value;
     const amount = parseFloat($("c_amount").value);
     const note = $("c_note").value.trim();
+    const applies = getAppliesFromForm();
 
     if (isNaN(amount) || amount <= 0) {
       U.toast("Please enter amount", "bad");
@@ -324,7 +363,8 @@
         date,
         category,
         amount,
-        note
+        note,
+        applies
       };
 
       state.costs.push(cost);
@@ -344,6 +384,7 @@
       cost.category = category;
       cost.amount = amount;
       cost.note = note;
+      cost.applies = applies;
 
       D.saveState(state);
       renderAll();
@@ -501,7 +542,7 @@
       return;
     }
 
-    const header = ["Date", "Category", "Amount", "Note"];
+    const header = ["Date", "Category", "Amount", "Note", "AppliesTo"];
 
     const rows = state.costs
       .slice()
@@ -511,7 +552,8 @@
           csvEscape(c.date || ""),
           csvEscape(c.category || ""),
           csvEscape(c.amount != null ? c.amount : ""),
-          csvEscape(c.note || "")
+          csvEscape(c.note || ""),
+          csvEscape(c.applies || "ev")
         ].join(",");
       });
 
@@ -593,6 +635,8 @@
       state.costs = Array.isArray(parsed.costs) ? parsed.costs : [];
       state.settings = Object.assign({}, state.settings, parsed.settings);
 
+      ensureCostAppliesDefaults();
+
       D.saveState(state);
       syncSettingsToInputs();
       renderAll();
@@ -610,6 +654,12 @@
   function wire() {
     $("date").value = todayISO();
     $("c_date").value = todayISO();
+
+    // по подразбиране EV за нови разходи
+    const appliesSelect = $("c_applies");
+    if (appliesSelect && !appliesSelect.value) {
+      appliesSelect.value = "ev";
+    }
 
     $("addEntry").addEventListener("click", onAddEntry);
     $("sameAsLast").addEventListener("click", onSameAsLast);
