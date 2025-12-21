@@ -18,10 +18,10 @@
     for (const c of state.costs) {
       if (!c) continue;
       if (!c.applies) {
-        // старите записи по подразбиране ги броим като EV
-        c.applies = "ev";
+        // за старите записи по подразбиране – other,
+        // за да не ги броим нито чисто като EV, нито като ICE
+        c.applies = "other";
       } else {
-        // нормализираме към малки букви
         c.applies = String(c.applies).toLowerCase();
       }
     }
@@ -159,11 +159,11 @@
 
     const appliesSelect = $("c_applies");
     if (appliesSelect) {
-      const v = (cost.applies || "ev").toLowerCase();
+      const v = (cost.applies || "other").toLowerCase();
       if (v === "ev" || v === "ice" || v === "both" || v === "other") {
         appliesSelect.value = v;
       } else {
-        appliesSelect.value = "ev";
+        appliesSelect.value = "other";
       }
     }
 
@@ -177,12 +177,12 @@
 
   function getAppliesFromForm() {
     const el = $("c_applies");
-    if (!el) return "ev";
+    if (!el) return "other";
     const v = (el.value || "").toLowerCase();
     if (v === "ev" || v === "ice" || v === "both" || v === "other") {
       return v;
     }
-    return "ev";
+    return "other";
   }
 
   // ---------- maintenance total from Costs (all-time) ----------
@@ -233,8 +233,8 @@
       const total = computeMaintenanceTotalAllTime();
       let el = $("maintenanceTotalCompare");
       if (!el) {
-        el.id = "maintenanceTotalCompare";
         el = document.createElement("p");
+        el.id = "maintenanceTotalCompare";
         el.className = "small";
         el.style.marginTop = "8px";
         container.appendChild(el);
@@ -553,7 +553,7 @@
           csvEscape(c.category || ""),
           csvEscape(c.amount != null ? c.amount : ""),
           csvEscape(c.note || ""),
-          csvEscape(c.applies || "ev")
+          csvEscape(c.applies || "other")
         ].join(",");
       });
 
@@ -655,10 +655,10 @@
     $("date").value = todayISO();
     $("c_date").value = todayISO();
 
-    // по подразбиране EV за нови разходи
+    // по подразбиране OTHER за нови разходи
     const appliesSelect = $("c_applies");
     if (appliesSelect && !appliesSelect.value) {
-      appliesSelect.value = "ev";
+      appliesSelect.value = "other";
     }
 
     $("addEntry").addEventListener("click", onAddEntry);
