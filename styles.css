@@ -129,6 +129,37 @@ button.primary {
   color: #050505;
 }
 
+/* Small action buttons (tables) */
+.btn-mini {
+  border-radius: 14px;
+  border: 1px solid #333;
+  background: #121212;
+  color: #f5f5f5;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  margin: 0 4px 0 0;
+}
+.btn-mini .txt {
+  display: inline;
+}
+.btn-mini .ico {
+  margin-right: 4px;
+}
+.btn-mini.danger {
+  border-color: #3a1a1a;
+}
+
+@media (max-width: 520px) {
+  /* On phone hide " Edit" text → keep ✎ only */
+  .btn-mini .txt {
+    display: none;
+  }
+  .btn-mini .ico {
+    margin-right: 0;
+  }
+}
+
 /* Details */
 
 details {
@@ -163,6 +194,7 @@ td {
   padding: 5px 4px;
   text-align: left;
   border-bottom: 1px solid #222;
+  vertical-align: top;
 }
 
 th {
@@ -187,6 +219,12 @@ tr.total-row {
   border: 1px solid #333;
 }
 
+/* Action column in tables */
+.actcol {
+  width: 1%;
+  white-space: nowrap;
+}
+
 /* Summary / compare */
 
 #summary_this,
@@ -199,6 +237,31 @@ tr.total-row {
   padding: 10px 12px;
   margin-bottom: 10px;
   font-size: 0.9rem;
+}
+
+/* Filter UI */
+.filterRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.filterRow input[type="text"] {
+  flex: 1;
+  margin: 0;
+}
+
+.filterRow button {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 16px;
+}
+
+/* Small text helper */
+.small {
+  font-size: 0.85rem;
+  color: #b0b0b0;
 }
 
 /* Toast */
@@ -235,45 +298,4 @@ tr.total-row {
 
 #toast.info {
   background: #333;
-}
-
-/* --- Compact Actions column (safe add-on) --- */
-th.actcol,
-td.actcol {
-  width: 1%;
-  white-space: nowrap;
-  text-align: right;
-}
-
-.btn-mini {
-  border-radius: 18px;
-  border: 1px solid #333;
-  background: #111;
-  color: #f5f5f5;
-  padding: 4px 8px;
-  margin: 0 0 0 6px; /* override default button margins */
-  font-size: 0.8rem;
-  line-height: 1;
-}
-
-.btn-mini.danger {
-  border-color: #c82929;
-  color: #ffb3b3;
-  background: #111;
-}
-
-@media (max-width: 520px) {
-  .btn-mini {
-    padding: 4px 6px;
-    font-size: 0.78rem;
-  }
-
-  /* Hide the "Edit" text on phones and show only icon */
-  .btn-mini .txt {
-    display: none;
-  }
-  .btn-mini .ico {
-    display: inline;
-    font-size: 0.95rem;
-  }
 }
