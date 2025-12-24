@@ -208,8 +208,14 @@
     if (inp) {
       inp.addEventListener("input", () => {
         logFilterText = inp.value || "";
-        // rerender with same data
         renderLogTable(containerId, entries);
+      });
+      inp.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          const detailsEl = inp.closest("details");
+          if (detailsEl) detailsEl.open = false;
+        }
       });
     }
     if (clr) {
@@ -296,7 +302,7 @@
     const totalAll = sorted.reduce((s, c) => s + (c.amount || 0), 0);
     const totalShown = filtered.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category (all data, not filtered) — keeps it stable
+    // totals by category (all data, not filtered)
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -406,6 +412,13 @@
         costFilterText = inp.value || "";
         renderCostTable(containerId, costs);
       });
+      inp.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          const detailsEl = inp.closest("details");
+          if (detailsEl) detailsEl.open = false;
+        }
+      });
     }
     if (clr) {
       clr.addEventListener("click", () => {
@@ -439,7 +452,7 @@
       return `
         <p style="margin:0 0 4px;">
           <strong>${kwh} kWh</strong> • <strong>${cost}</strong>
-          ${count != null ? ` • <strong>${count}</strong> sessions` : ""}
+          ${count != null ? ` • <strong>${count}</strong> sessions</strong>` : ""}
         </p>
         <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
           ${avgPrice ? `Avg: <strong style="color:#f5f5f5;">${avgPrice}</strong>` : "Avg: n/a"}
@@ -490,7 +503,7 @@
     `;
   }
 
-  // ------- render compare (your clean collapsible version stays as-is) -------
+  // ------- render compare (as before, collapsible) -------
 
   function renderCompare(containerId, data) {
     const el = document.getElementById(containerId);
