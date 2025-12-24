@@ -1,4 +1,4 @@
-// ui.js – formatting + rendering helpers (NEWEST FIRST + collapsible filters)
+// ui.js – formatting + rendering helpers (NEWEST FIRST + collapsible + filters fixed)
 
 (function () {
   // keep filter text between renders (UI-only)
@@ -65,17 +65,16 @@
               ? "home"
               : "home xp";
 
-          const hay =
-            [
-              e.date,
-              e.kwh,
-              e.price,
-              typeLabel,
-              e.type,
-              e.note || ""
-            ]
-              .map((x) => safeLower(x))
-              .join(" ");
+          const hay = [
+            e.date,
+            e.kwh,
+            e.price,
+            typeLabel,
+            e.type,
+            e.note || ""
+          ]
+            .map((x) => safeLower(x))
+            .join(" ");
 
           return hay.includes(filter);
         });
@@ -122,11 +121,17 @@
     });
 
     const totalKwhAll = entries.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCostAll = entries.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
+    const totalCostAll = entries.reduce(
+      (s, e) => s + (e.kwh * e.price || 0),
+      0
+    );
     const sessionsAll = entries.length;
 
     const totalKwhShown = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCostShown = filtered.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
+    const totalCostShown = filtered.reduce(
+      (s, e) => s + (e.kwh * e.price || 0),
+      0
+    );
     const sessionsShown = filtered.length;
 
     const summaryBlock = `
@@ -153,12 +158,17 @@
       </details>
     `;
 
+    // ✅ Filter остава отворен, ако има текст
+    const filterOpenAttr = filter ? "open" : "";
+
     const filterBlock = `
-      <details style="margin:0 0 8px;">
+      <details style="margin:0 0 8px;" ${filterOpenAttr}>
         <summary style="cursor:pointer;"><strong>Filter</strong></summary>
         <div style="margin-top:8px;">
           <div class="filterRow">
-            <input id="logFilterInput" type="text" placeholder="Search date, note, type, price…" value="${(logFilterText || "").replace(/"/g, "&quot;")}" />
+            <input id="logFilterInput" type="text"
+              placeholder="Search date, note, type, price…"
+              value="${(logFilterText || "").replace(/"/g, "&quot;")}" />
             <button id="logFilterClear" type="button">Clear</button>
           </div>
           <p class="small" style="margin:6px 0 0;">
@@ -166,7 +176,7 @@
           </p>
         </div>
       </details>
-    `;
+    ";
 
     el.innerHTML = `
       ${summaryBlock}
@@ -214,7 +224,7 @@
         if (ev.key === "Enter") {
           ev.preventDefault();
           const detailsEl = inp.closest("details");
-          if (detailsEl) detailsEl.open = false;
+          if (detailsEl) detailsEl.open = false; // 🔒 затваряме само при Enter
         }
       });
     }
@@ -248,16 +258,15 @@
       ? sorted
       : sorted.filter((c) => {
           const appliesRaw = (c.applies || "other").toLowerCase();
-          const hay =
-            [
-              c.date,
-              c.category,
-              c.amount,
-              c.note || "",
-              appliesRaw
-            ]
-              .map((x) => safeLower(x))
-              .join(" ");
+          const hay = [
+            c.date,
+            c.category,
+            c.amount,
+            c.note || "",
+            appliesRaw
+          ]
+            .map((x) => safeLower(x))
+            .join(" ");
           return hay.includes(filter);
         });
 
@@ -329,12 +338,17 @@
       </p>
     `;
 
+    // ✅ Filter остава отворен, ако има текст
+    const filterOpenAttr = filter ? "open" : "";
+
     const filterBlock = `
-      <details style="margin:0 0 8px;">
+      <details style="margin:0 0 8px;" ${filterOpenAttr}>
         <summary style="cursor:pointer;"><strong>Filter</strong></summary>
         <div style="margin-top:8px;">
           <div class="filterRow">
-            <input id="costFilterInput" type="text" placeholder="Search category, note, EV/ICE, amount…" value="${(costFilterText || "").replace(/"/g, "&quot;")}" />
+            <input id="costFilterInput" type="text"
+              placeholder="Search category, note, EV/ICE, amount…"
+              value="${(costFilterText || "").replace(/"/g, "&quot;")}" />
             <button id="costFilterClear" type="button">Clear</button>
           </div>
           <p class="small" style="margin:6px 0 0;">
@@ -404,7 +418,6 @@
       </details>
     `;
 
-    // wire filter events after render
     const inp = document.getElementById("costFilterInput");
     const clr = document.getElementById("costFilterClear");
     if (inp) {
@@ -416,7 +429,7 @@
         if (ev.key === "Enter") {
           ev.preventDefault();
           const detailsEl = inp.closest("details");
-          if (detailsEl) detailsEl.open = false;
+          if (detailsEl) detailsEl.open = false; // 🔒 затваряме само при Enter
         }
       });
     }
@@ -444,15 +457,19 @@
       const count = data.count != null ? data.count : null;
 
       const avgPrice =
-        data.avgPrice && data.avgPrice > 0 ? `£${data.avgPrice.toFixed(3)}/kWh` : null;
+        data.avgPrice && data.avgPrice > 0
+          ? `£${data.avgPrice.toFixed(3)}/kWh`
+          : null;
 
       const perDay =
-        data.perDay && data.perDay > 0 ? fmtGBP(data.perDay) + "/day" : null;
+        data.perDay && data.perDay > 0
+          ? fmtGBP(data.perDay) + "/day"
+          : null;
 
       return `
         <p style="margin:0 0 4px;">
           <strong>${kwh} kWh</strong> • <strong>${cost}</strong>
-          ${count != null ? ` • <strong>${count}</strong> sessions</strong>` : ""}
+          ${count != null ? ` • <strong>${count}</strong> sessions` : ""}
         </p>
         <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
           ${avgPrice ? `Avg: <strong style="color:#f5f5f5;">${avgPrice}</strong>` : "Avg: n/a"}
@@ -503,7 +520,7 @@
     `;
   }
 
-  // ------- render compare (as before, collapsible) -------
+  // ------- render compare (unchanged from last fixed version) -------
 
   function renderCompare(containerId, data) {
     const el = document.getElementById(containerId);
@@ -570,9 +587,13 @@
 
     let energyExplain = "";
     if (diffEnergy > 1) {
-      energyExplain = `ICE would cost <strong>${fmtGBP(diffEnergy)}</strong> more for your recorded EV miles.`;
+      energyExplain = `ICE would cost <strong>${fmtGBP(
+        diffEnergy
+      )}</strong> more for your recorded EV miles.`;
     } else if (diffEnergy < -1) {
-      energyExplain = `EV would cost <strong>${fmtGBP(Math.abs(diffEnergy))}</strong> more than ICE (check assumptions).`;
+      energyExplain = `EV would cost <strong>${fmtGBP(
+        Math.abs(diffEnergy)
+      )}</strong> more than ICE (check assumptions).`;
     } else {
       energyExplain = `EV and ICE are roughly the same cost for your recorded EV miles.`;
     }
@@ -582,15 +603,17 @@
         <summary style="cursor:pointer;"><strong>Energy vs ICE (details)</strong></summary>
         <div style="margin-top:6px;">
           <p>Total kWh (all time): <strong>${fmtNum(data.totalKwh, 1)}</strong></p>
-          <p>Estimated miles (@ ${fmtNum(data.evMilesPerKwh, 1)} mi/kWh): <strong>${fmtNum(
-      miles,
-      0
-    )}</strong></p>
+          <p>Estimated miles (@ ${fmtNum(
+            data.evMilesPerKwh,
+            1
+          )} mi/kWh): <strong>${fmtNum(miles, 0)}</strong></p>
           <p>EV energy cost: <strong>${fmtGBP(data.evCost)}</strong></p>
           <p>ICE fuel cost (approx): <strong>${fmtGBP(data.iceCost)}</strong></p>
           <p>EV £/mile: <strong>£${evPerMile.toFixed(3)}</strong></p>
           <p>ICE £/mile: <strong>£${icePerMile.toFixed(3)}</strong></p>
-          <p>Difference (ICE – EV): <strong>${fmtGBP(Math.abs(diffEnergy))}</strong></p>
+          <p>Difference (ICE – EV): <strong>${fmtGBP(
+            Math.abs(diffEnergy)
+          )}</strong></p>
           <p>${energyExplain}</p>
         </div>
       </details>
@@ -602,15 +625,21 @@
         <details>
           <summary style="cursor:pointer;"><strong>Maintenance (details)</strong></summary>
           <div style="margin-top:6px;">
-            <p>Maintenance – EV: <strong>${fmtGBP(maintEv)}</strong>, ICE: <strong>${fmtGBP(
-        maintIce
-      )}</strong></p>
-            <p>Shared (Both): <strong>${fmtGBP(maintBoth)}</strong>, Other: <strong>${fmtGBP(
-        maintOther
-      )}</strong></p>
-            <p>Total EV (energy + EV maintenance): <strong>${fmtGBP(evTotalAll)}</strong></p>
-            <p>Total ICE (fuel + ICE maintenance): <strong>${fmtGBP(iceTotalAll)}</strong></p>
-            <p>All-in difference (ICE – EV): <strong>${fmtGBP(Math.abs(diffAll))}</strong></p>
+            <p>Maintenance – EV: <strong>${fmtGBP(
+              maintEv
+            )}</strong>, ICE: <strong>${fmtGBP(maintIce)}</strong></p>
+            <p>Shared (Both): <strong>${fmtGBP(
+              maintBoth
+            )}</strong>, Other: <strong>${fmtGBP(maintOther)}</strong></p>
+            <p>Total EV (energy + EV maintenance): <strong>${fmtGBP(
+              evTotalAll
+            )}</strong></p>
+            <p>Total ICE (fuel + ICE maintenance): <strong>${fmtGBP(
+              iceTotalAll
+            )}</strong></p>
+            <p>All-in difference (ICE – EV): <strong>${fmtGBP(
+              Math.abs(diffAll)
+            )}</strong></p>
           </div>
         </details>
       `;
@@ -626,14 +655,16 @@
         <details>
           <summary style="cursor:pointer;"><strong>Insurance (details)</strong></summary>
           <div style="margin-top:6px;">
-            <p>Insurance – EV: <strong>${fmtGBP(insEv)}</strong>, ICE: <strong>${fmtGBP(
-        insIce
-      )}</strong></p>
-            <p>Shared (Both): <strong>${fmtGBP(insBoth)}</strong>, Other: <strong>${fmtGBP(
-        insOther
-      )}</strong></p>
+            <p>Insurance – EV: <strong>${fmtGBP(
+              insEv
+            )}</strong>, ICE: <strong>${fmtGBP(insIce)}</strong></p>
+            <p>Shared (Both): <strong>${fmtGBP(
+              insBoth
+            )}</strong>, Other: <strong>${fmtGBP(insOther)}</strong></p>
             <p>Total insurance: <strong>${fmtGBP(insTotal)}</strong></p>
-            <p>Difference (ICE – EV): <strong>${fmtGBP(Math.abs(insDiff))}</strong> (${insDiffText})</p>
+            <p>Difference (ICE – EV): <strong>${fmtGBP(
+              Math.abs(insDiff)
+            )}</strong> (${insDiffText})</p>
           </div>
         </details>
       `;
@@ -646,19 +677,29 @@
       const saved = data.savedVsPublic ?? 0;
       const invest = data.chargerInvestment ?? 0;
       const remaining =
-        typeof data.remainingToRecover === "number" ? data.remainingToRecover : null;
+        typeof data.remainingToRecover === "number"
+          ? data.remainingToRecover
+          : null;
 
       let savedLine = "";
-      if (saved > 1) savedLine = `Saved vs all-public: <strong>${fmtGBP(saved)}</strong>.`;
+      if (saved > 1)
+        savedLine = `Saved vs all-public: <strong>${fmtGBP(saved)}</strong>.`;
       else if (saved < -1)
-        savedLine = `Extra vs all-public: <strong>${fmtGBP(Math.abs(saved))}</strong>.`;
+        savedLine = `Extra vs all-public: <strong>${fmtGBP(
+          Math.abs(saved)
+        )}</strong>.`;
       else savedLine = `Almost no difference vs all-public price.`;
 
       let investLine = "";
       if (invest > 0 && remaining !== null) {
-        if (remaining > 1) investLine = `Still to recover: <strong>${fmtGBP(remaining)}</strong>.`;
+        if (remaining > 1)
+          investLine = `Still to recover: <strong>${fmtGBP(
+            remaining
+          )}</strong>.`;
         else if (remaining < -1)
-          investLine = `Already recovered by about <strong>${fmtGBP(Math.abs(remaining))}</strong>.`;
+          investLine = `Already recovered by about <strong>${fmtGBP(
+            Math.abs(remaining)
+          )}</strong>.`;
         else investLine = `Charger is roughly at break-even.`;
       }
 
@@ -668,11 +709,15 @@
           <div style="margin-top:6px;">
             <p>Public benchmark: <strong>£${pr.toFixed(3)}</strong> / kWh</p>
             <p>If all EV kWh were public: <strong>${fmtGBP(allPub)}</strong></p>
-            <p>Your actual EV charging cost: <strong>${fmtGBP(data.evCost)}</strong></p>
+            <p>Your actual EV charging cost: <strong>${fmtGBP(
+              data.evCost
+            )}</strong></p>
             <p>${savedLine}</p>
             ${
               invest > 0
-                ? `<p>Charger investment (hardware + install): <strong>${fmtGBP(invest)}</strong></p>`
+                ? `<p>Charger investment (hardware + install): <strong>${fmtGBP(
+                    invest
+                  )}</strong></p>`
                 : ""
             }
             ${investLine ? `<p>${investLine}</p>` : ""}
