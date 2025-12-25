@@ -1,7 +1,7 @@
-// ui.js – formatting + rendering helpers (NEWEST FIRST + collapsible + filters fixed)
+// ui.js – formatting + rendering helpers (fixed filters, newest-first, compact summary & compare)
 
 (function () {
-  // keep filter text between renders (UI-only)
+  // UI-only filter state (не се пази в localStorage)
   let logFilterText = "";
   let costFilterText = "";
 
@@ -16,7 +16,6 @@
   }
 
   function fmtDate(d) {
-    // expect "YYYY-MM-DD"
     return d || "";
   }
 
@@ -48,7 +47,7 @@
 
     const filter = safeLower(logFilterText).trim();
 
-    // NEWEST FIRST (descending)
+    // най-новите записи отгоре
     const sorted = entries
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -158,11 +157,11 @@
       </details>
     `;
 
-    // ✅ Filter остава отворен, ако има текст
-    const filterOpenAttr = filter ? "open" : "";
+    // ако има текст → Filter да е отворен
+    const filterOpenAttr = filter ? " open" : "";
 
     const filterBlock = `
-      <details style="margin:0 0 8px;" ${filterOpenAttr}>
+      <details style="margin:0 0 8px;"${filterOpenAttr}>
         <summary style="cursor:pointer;"><strong>Filter</strong></summary>
         <div style="margin-top:8px;">
           <div class="filterRow">
@@ -176,7 +175,7 @@
           </p>
         </div>
       </details>
-    ";
+    `;
 
     el.innerHTML = `
       ${summaryBlock}
@@ -212,7 +211,7 @@
       }
     `;
 
-    // wire filter events after render
+    // събития за филтъра
     const inp = document.getElementById("logFilterInput");
     const clr = document.getElementById("logFilterClear");
     if (inp) {
@@ -224,7 +223,7 @@
         if (ev.key === "Enter") {
           ev.preventDefault();
           const detailsEl = inp.closest("details");
-          if (detailsEl) detailsEl.open = false; // 🔒 затваряме само при Enter
+          if (detailsEl) detailsEl.open = false; // затваряме само при Enter
         }
       });
     }
@@ -249,7 +248,6 @@
 
     const filter = safeLower(costFilterText).trim();
 
-    // NEWEST FIRST (descending)
     const sorted = costs
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -279,7 +277,6 @@
       if (appliesRaw === "ev") appliesLabel = "EV";
       else if (appliesRaw === "ice") appliesLabel = "ICE";
       else if (appliesRaw === "both") appliesLabel = "Both";
-      else appliesLabel = "Other";
 
       return `<tr>
         <td>${fmtDate(c.date)}</td>
@@ -311,7 +308,6 @@
     const totalAll = sorted.reduce((s, c) => s + (c.amount || 0), 0);
     const totalShown = filtered.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category (all data, not filtered)
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -328,7 +324,7 @@
         </tr>`
       );
 
-    const legend = `
+    const legendInner = `
       <p class="small" style="margin-top:8px;line-height:1.35;">
         <strong>For</strong> means which vehicle the cost applies to:
         <strong>EV</strong> = electric car only,
@@ -338,11 +334,10 @@
       </p>
     `;
 
-    // ✅ Filter остава отворен, ако има текст
-    const filterOpenAttr = filter ? "open" : "";
+    const filterOpenAttr = filter ? " open" : "";
 
     const filterBlock = `
-      <details style="margin:0 0 8px;" ${filterOpenAttr}>
+      <details style="margin:0 0 8px;"${filterOpenAttr}>
         <summary style="cursor:pointer;"><strong>Filter</strong></summary>
         <div style="margin-top:8px;">
           <div class="filterRow">
@@ -413,7 +408,7 @@
       <details style="margin-top:10px;">
         <summary style="cursor:pointer;"><strong>What does “For” mean?</strong></summary>
         <div style="margin-top:6px;">
-          ${legend}
+          ${legendInner}
         </div>
       </details>
     `;
@@ -429,7 +424,7 @@
         if (ev.key === "Enter") {
           ev.preventDefault();
           const detailsEl = inp.closest("details");
-          if (detailsEl) detailsEl.open = false; // 🔒 затваряме само при Enter
+          if (detailsEl) detailsEl.open = false;
         }
       });
     }
@@ -441,7 +436,7 @@
     }
   }
 
-  // ------- render summary (COMPACT + COLLAPSIBLE) -------
+  // ------- render summary (compact + collapsible) -------
 
   function renderSummary(containerIds, summary) {
     const [idThis, idLast, idAvg] = containerIds.map((id) =>
@@ -472,8 +467,16 @@
           ${count != null ? ` • <strong>${count}</strong> sessions` : ""}
         </p>
         <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
-          ${avgPrice ? `Avg: <strong style="color:#f5f5f5;">${avgPrice}</strong>` : "Avg: n/a"}
-          ${perDay ? ` • ~ <strong style="color:#f5f5f5;">${perDay}</strong>` : ""}
+          ${
+            avgPrice
+              ? `Avg: <strong style="color:#f5f5f5;">${avgPrice}</strong>`
+              : "Avg: n/a"
+          }
+          ${
+            perDay
+              ? ` • ~ <strong style="color:#f5f5f5;">${perDay}</strong>`
+              : ""
+          }
         </p>
       `;
     }
@@ -520,7 +523,7 @@
     `;
   }
 
-  // ------- render compare (unchanged from last fixed version) -------
+  // ------- render compare (както в последната добра версия) -------
 
   function renderCompare(containerId, data) {
     const el = document.getElementById(containerId);
@@ -636,9 +639,6 @@
             )}</strong></p>
             <p>Total ICE (fuel + ICE maintenance): <strong>${fmtGBP(
               iceTotalAll
-            )}</strong></p>
-            <p>All-in difference (ICE – EV): <strong>${fmtGBP(
-              Math.abs(diffAll)
             )}</strong></p>
           </div>
         </details>
