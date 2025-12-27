@@ -1,4 +1,4 @@
-// ui.js – formatting + rendering helpers (with simple filters)
+// ui.js – formatting + rendering helpers (with apply-based filters)
 
 (function () {
   // --- UI-only filter state (не се пази в localStorage) ---
@@ -159,7 +159,7 @@
     `;
 
     const filterBlock = `
-      <div style="margin:0 0 8px;display:flex;gap:6px;align-items:center;">
+      <div style="margin:0 0 8px;display:flex;gap:6px;align-items:center;flex-wrap:nowrap;">
         <input
           id="logFilterInput"
           type="text"
@@ -167,6 +167,7 @@
           value="${(logFilterText || "").replace(/"/g, "&quot;")}"
           style="flex:1;min-width:0;"
         />
+        <button id="logFilterApply" type="button">Apply</button>
         <button id="logFilterClear" type="button">Clear</button>
       </div>
       <p class="small" style="margin:0 0 4px;color:#aaaaaa;">
@@ -208,19 +209,27 @@
       }
     `;
 
-    // Събития за филтъра
+    // Събития за филтъра – НЕ ререндваме при всяка буква
     const inp = document.getElementById("logFilterInput");
-    const clr = document.getElementById("logFilterClear");
+    const btnApply = document.getElementById("logFilterApply");
+    const btnClear = document.getElementById("logFilterClear");
 
     if (inp) {
       inp.addEventListener("input", () => {
+        // само пазим текста, не ререндваме
         logFilterText = inp.value || "";
+      });
+    }
+
+    if (btnApply) {
+      btnApply.addEventListener("click", () => {
+        // при Apply ререндваме
         renderLogTable(containerId, entries);
       });
     }
 
-    if (clr) {
-      clr.addEventListener("click", () => {
+    if (btnClear) {
+      btnClear.addEventListener("click", () => {
         logFilterText = "";
         renderLogTable(containerId, entries);
       });
@@ -329,7 +338,7 @@
     `;
 
     const filterBlock = `
-      <div style="margin:0 0 8px;display:flex;gap:6px;align-items:center;">
+      <div style="margin:0 0 8px;display:flex;gap:6px;align-items:center;flex-wrap:nowrap;">
         <input
           id="costFilterInput"
           type="text"
@@ -337,6 +346,7 @@
           value="${(costFilterText || "").replace(/"/g, "&quot;")}"
           style="flex:1;min-width:0;"
         />
+        <button id="costFilterApply" type="button">Apply</button>
         <button id="costFilterClear" type="button">Clear</button>
       </div>
       <p class="small" style="margin:0 0 4px;color:#aaaaaa;">
@@ -405,17 +415,23 @@
     `;
 
     const inp = document.getElementById("costFilterInput");
-    const clr = document.getElementById("costFilterClear");
+    const btnApply = document.getElementById("costFilterApply");
+    const btnClear = document.getElementById("costFilterClear");
 
     if (inp) {
       inp.addEventListener("input", () => {
         costFilterText = inp.value || "";
+      });
+    }
+
+    if (btnApply) {
+      btnApply.addEventListener("click", () => {
         renderCostTable(containerId, costs);
       });
     }
 
-    if (clr) {
-      clr.addEventListener("click", () => {
+    if (btnClear) {
+      btnClear.addEventListener("click", () => {
         costFilterText = "";
         renderCostTable(containerId, costs);
       });
@@ -497,7 +513,7 @@
     `;
   }
 
-  // ------- render compare (same as твоят „clean + collapsible“) -------
+  // ------- render compare (както преди – clean + collapsible) -------
 
   function renderCompare(containerId, data) {
     const el = document.getElementById(containerId);
