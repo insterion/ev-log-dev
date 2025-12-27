@@ -132,7 +132,7 @@
     `;
   }
 
-  // ------- state за COSTS filter -------
+  // ------- COSTS filter state -------
 
   let costFilterText = "";
   let costFilterApplies = "all"; // all | ev | ice | both | other
@@ -176,7 +176,6 @@
       return;
     }
 
-    // филтриране
     const filtered = allCosts.filter(matchesCostFilter);
 
     // NEWEST FIRST (descending)
@@ -224,7 +223,7 @@
 
     const total = sorted.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category (върху филтрираните)
+    // totals by category (for filtered data)
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -248,7 +247,7 @@
     const filterInfo = hasActiveFilter
       ? `<p class="small" style="margin:4px 0 0;color:#b0b0b0;">
            Filter active – showing <strong>${filtered.length}</strong> of
-           <strong>${allCosts.length</strong>} costs.
+           <strong>${allCosts.length}</strong> costs.
          </p>`
       : "";
 
@@ -336,7 +335,8 @@
       </details>
     `;
 
-    // след като сложим HTML-а – попълваме текущите стойности и връзваме бутоните
+    // wiring – след като HTML вече е вкаран
+
     const txtEl = document.getElementById("costFilterText");
     const selEl = document.getElementById("costFilterApplies");
     const applyBtn = document.getElementById("costFilterApply");
