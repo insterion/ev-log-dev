@@ -299,3 +299,13 @@ tr.total-row {
 #toast.info {
   background: #333;
 }
+/* Small text helper */
+.small {
+  font-size: 0.8rem;
+  color: #b0b0b0;
+}
+
+/* Filter indicator line under tables */
+.filter-indicator {
+  margin: 4px 0 0;
+}
