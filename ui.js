@@ -27,44 +27,6 @@
     }, 1700);
   }
 
-  // ------- helper: detect if filter is active (Log / Costs) -------
-
-  function getFilterMeta(kind, shownCount) {
-    // kind: "entries" или "costs"
-    try {
-      const D = window.EVData;
-      if (!D || !D.loadState) {
-        return { active: false, total: shownCount };
-      }
-      const st = D.loadState();
-      if (!st) {
-        return { active: false, total: shownCount };
-      }
-
-      let total = shownCount;
-      if (kind === "entries") {
-        total = Array.isArray(st.entries) ? st.entries.length : 0;
-      } else if (kind === "costs") {
-        total = Array.isArray(st.costs) ? st.costs.length : 0;
-      }
-
-      if (!total) {
-        return { active: false, total: shownCount };
-      }
-
-      if (shownCount >= total) {
-        return { active: false, total };
-      }
-
-      return { active: true, total };
-    } catch (e) {
-      if (console && console.warn) {
-        console.warn("getFilterMeta failed", e);
-      }
-      return { active: false, total: shownCount };
-    }
-  }
-
   // ------- render charging log -------
 
   function renderLogTable(containerId, entries) {
@@ -125,15 +87,6 @@
     const totalCost = entries.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
     const sessions = entries.length;
 
-    // filter meta за Log
-    const logMeta = getFilterMeta("entries", sessions);
-    const filterLine =
-      logMeta.active && logMeta.total > 0
-        ? `<p class="small filter-indicator">
-             Filter active – showing <strong>${sessions}</strong> of <strong>${logMeta.total}</strong> entries
-           </p>`
-        : "";
-
     const summaryBlock = `
       <details open style="margin:4px 0 8px;">
         <summary style="cursor:pointer;color:#cccccc;">
@@ -141,8 +94,8 @@
         </summary>
         <div style="margin-top:6px;font-size:0.85rem;color:#cccccc;">
           <p style="margin:0;">
-            <strong>${fmtNum(totalKwh, 1)} kWh</strong> ·
-            <strong>${fmtGBP(totalCost)}</strong> ·
+            <strong>${fmtNum(totalKwh, 1)} kWh</strong> •
+            <strong>${fmtGBP(totalCost)}</strong> •
             <strong>${sessions}</strong> sessions
           </p>
         </div>
@@ -151,7 +104,6 @@
 
     el.innerHTML = `
       ${summaryBlock}
-      ${filterLine}
       <table>
         <thead>
           <tr>
@@ -180,19 +132,55 @@
     `;
   }
 
-  // ------- render costs -------
+  // ------- state за COSTS filter -------
+
+  let costFilterText = "";
+  let costFilterApplies = "all"; // all | ev | ice | both | other
+
+  function matchesCostFilter(cost) {
+    if (!cost) return false;
+
+    // applies filter
+    const appliesRaw = (cost.applies || "other").toLowerCase();
+    if (costFilterApplies !== "all" && appliesRaw !== costFilterApplies) {
+      return false;
+    }
+
+    // text filter
+    const q = costFilterText.trim().toLowerCase();
+    if (!q) return true;
+
+    const date = (cost.date || "").toLowerCase();
+    const cat = (cost.category || "").toLowerCase();
+    const note = (cost.note || "").toLowerCase();
+    const amountStr = String(cost.amount ?? "").toLowerCase();
+
+    return (
+      date.includes(q) ||
+      cat.includes(q) ||
+      note.includes(q) ||
+      amountStr.includes(q)
+    );
+  }
+
+  // ------- render costs (с текстов филтър + Filter active) -------
 
   function renderCostTable(containerId, costs) {
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    if (!costs.length) {
+    const allCosts = Array.isArray(costs) ? costs : [];
+
+    if (!allCosts.length) {
       el.innerHTML = "<p>No costs yet.</p>";
       return;
     }
 
+    // филтриране
+    const filtered = allCosts.filter(matchesCostFilter);
+
     // NEWEST FIRST (descending)
-    const sorted = costs
+    const sorted = filtered
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
@@ -236,7 +224,7 @@
 
     const total = sorted.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category
+    // totals by category (върху филтрираните)
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -253,9 +241,20 @@
         </tr>`
       );
 
+    const hasActiveFilter =
+      (costFilterText && costFilterText.trim() !== "") ||
+      (costFilterApplies && costFilterApplies !== "all");
+
+    const filterInfo = hasActiveFilter
+      ? `<p class="small" style="margin:4px 0 0;color:#b0b0b0;">
+           Filter active – showing <strong>${filtered.length}</strong> of
+           <strong>${allCosts.length</strong>} costs.
+         </p>`
+      : "";
+
     const legend = `
       <p class="small" style="margin-top:8px;line-height:1.35;">
-        <strong>For</strong> shows which vehicle the cost applies to:
+        <strong>For</strong> means which vehicle the cost applies to:
         <strong>EV</strong> = electric car only,
         <strong>ICE</strong> = petrol/diesel car only,
         <strong>Both</strong> = shared/combined cost,
@@ -263,17 +262,29 @@
       </p>
     `;
 
-    // filter meta за Costs
-    const costMeta = getFilterMeta("costs", sorted.length);
-    const filterLine =
-      costMeta.active && costMeta.total > 0
-        ? `<p class="small filter-indicator">
-             Filter active – showing <strong>${sorted.length}</strong> of <strong>${costMeta.total}</strong> costs
-           </p>`
-        : "";
-
     el.innerHTML = `
-      ${filterLine}
+      <div style="margin:4px 0 6px;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <input
+            id="costFilterText"
+            type="text"
+            placeholder="Filter by date, category, note, amount…"
+          />
+          <select id="costFilterApplies">
+            <option value="all">For: All</option>
+            <option value="ev">For: EV</option>
+            <option value="ice">For: ICE</option>
+            <option value="both">For: Both</option>
+            <option value="other">For: Other</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button type="button" id="costFilterApply">Apply</button>
+          <button type="button" id="costFilterClear">Clear</button>
+        </div>
+        ${filterInfo}
+      </div>
+
       <table>
         <thead>
           <tr>
@@ -324,6 +335,31 @@
         </div>
       </details>
     `;
+
+    // след като сложим HTML-а – попълваме текущите стойности и връзваме бутоните
+    const txtEl = document.getElementById("costFilterText");
+    const selEl = document.getElementById("costFilterApplies");
+    const applyBtn = document.getElementById("costFilterApply");
+    const clearBtn = document.getElementById("costFilterClear");
+
+    if (txtEl) txtEl.value = costFilterText;
+    if (selEl) selEl.value = costFilterApplies;
+
+    if (applyBtn) {
+      applyBtn.addEventListener("click", () => {
+        costFilterText = txtEl ? txtEl.value.trim() : "";
+        costFilterApplies = selEl ? selEl.value : "all";
+        renderCostTable(containerId, allCosts);
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        costFilterText = "";
+        costFilterApplies = "all";
+        renderCostTable(containerId, allCosts);
+      });
+    }
   }
 
   // ------- render summary (COMPACT + COLLAPSIBLE) -------
@@ -349,12 +385,12 @@
 
       return `
         <p style="margin:0 0 4px;">
-          <strong>${kwh} kWh</strong> · <strong>${cost}</strong>
-          ${count != null ? ` · <strong>${count}</strong> sessions` : ""}
+          <strong>${kwh} kWh</strong> • <strong>${cost}</strong>
+          ${count != null ? ` • <strong>${count}</strong> sessions` : ""}
         </p>
         <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
           ${avgPrice ? `Avg: <strong style="color:#f5f5f5;">${avgPrice}</strong>` : "Avg: n/a"}
-          ${perDay ? ` · ~ <strong style="color:#f5f5f5;">${perDay}</strong>` : ""}
+          ${perDay ? ` • ~ <strong style="color:#f5f5f5;">${perDay}</strong>` : ""}
         </p>
       `;
     }
@@ -385,7 +421,7 @@
             summary.avg
               ? `
                 <p style="margin:0 0 4px;">
-                  <strong>${fmtNum(summary.avg.kwh, 1)} kWh</strong> ·
+                  <strong>${fmtNum(summary.avg.kwh, 1)} kWh</strong> •
                   <strong>${fmtGBP(summary.avg.cost)}</strong>
                 </p>
                 <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
@@ -504,10 +540,6 @@
 
     let maintBlock = "";
     if (maintEv !== 0 || maintIce !== 0 || maintBoth !== 0 || maintOther !== 0) {
-      let diffAllText = "about the same";
-      if (diffAll > 1) diffAllText = "ICE more expensive";
-      else if (diffAll < -1) diffAllText = "EV more expensive";
-
       maintBlock = `
         <details>
           <summary style="cursor:pointer;"><strong>Maintenance (details)</strong></summary>
