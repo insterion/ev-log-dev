@@ -27,19 +27,48 @@
     }, 1700);
   }
 
+  // ===== LOG FILTER STATE =====
+  let logFilterText = "";
+
+  function matchesLogFilter(entry) {
+    if (!entry) return false;
+    const q = (logFilterText || "").trim().toLowerCase();
+    if (!q) return true;
+
+    const date = (entry.date || "").toLowerCase();
+    const type = (entry.type || "").toLowerCase();
+    const note = (entry.note || "").toLowerCase();
+    const kwhStr = String(entry.kwh ?? "").toLowerCase();
+    const priceStr = String(entry.price ?? "").toLowerCase();
+    const costStr = String((entry.kwh || 0) * (entry.price || 0)).toLowerCase();
+
+    return (
+      date.includes(q) ||
+      type.includes(q) ||
+      note.includes(q) ||
+      kwhStr.includes(q) ||
+      priceStr.includes(q) ||
+      costStr.includes(q)
+    );
+  }
+
   // ------- render charging log -------
 
   function renderLogTable(containerId, entries) {
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    if (!entries.length) {
+    const allEntries = Array.isArray(entries) ? entries : [];
+
+    if (!allEntries.length) {
       el.innerHTML = "<p>No entries yet.</p>";
       return;
     }
 
+    const filtered = allEntries.filter(matchesLogFilter);
+
     // NEWEST FIRST (descending)
-    const rows = entries
+    const rows = filtered
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
       .map((e) => {
@@ -83,9 +112,17 @@
         </tr>`;
       });
 
-    const totalKwh = entries.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCost = entries.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
-    const sessions = entries.length;
+    const totalKwh = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
+    const totalCost = filtered.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
+    const sessions = filtered.length;
+
+    const hasActiveFilter = (logFilterText || "").trim() !== "";
+    const filterInfo = hasActiveFilter
+      ? `<p class="small" style="margin:4px 0 0;color:#b0b0b0;">
+           Filter active – showing <strong>${filtered.length}</strong> of
+           <strong>${allEntries.length}</strong> entries.
+         </p>`
+      : "";
 
     const summaryBlock = `
       <details open style="margin:4px 0 8px;">
@@ -103,6 +140,21 @@
     `;
 
     el.innerHTML = `
+      <div style="margin:4px 0 8px;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <input
+            id="logFilterText"
+            type="text"
+            placeholder="Filter by date, type, note…"
+          />
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button type="button" id="logFilterApply">Apply</button>
+          <button type="button" id="logFilterClear">Clear</button>
+        </div>
+        ${filterInfo}
+      </div>
+
       ${summaryBlock}
       <table>
         <thead>
@@ -130,24 +182,43 @@
         </tfoot>
       </table>
     `;
+
+    const txtEl = document.getElementById("logFilterText");
+    const applyBtn = document.getElementById("logFilterApply");
+    const clearBtn = document.getElementById("logFilterClear");
+
+    if (txtEl) txtEl.value = logFilterText;
+
+    if (applyBtn) {
+      applyBtn.addEventListener("click", () => {
+        logFilterText = txtEl ? txtEl.value.trim() : "";
+        renderLogTable(containerId, allEntries);
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        logFilterText = "";
+        renderLogTable(containerId, allEntries);
+      });
+    }
   }
 
-  // ------- COSTS filter state -------
-
+  // ===== COSTS FILTER STATE =====
   let costFilterText = "";
   let costFilterApplies = "all"; // all | ev | ice | both | other
 
   function matchesCostFilter(cost) {
     if (!cost) return false;
 
-    // applies filter
     const appliesRaw = (cost.applies || "other").toLowerCase();
+
+    // dropdown filter
     if (costFilterApplies !== "all" && appliesRaw !== costFilterApplies) {
       return false;
     }
 
-    // text filter
-    const q = costFilterText.trim().toLowerCase();
+    const q = (costFilterText || "").trim().toLowerCase();
     if (!q) return true;
 
     const date = (cost.date || "").toLowerCase();
@@ -155,15 +226,17 @@
     const note = (cost.note || "").toLowerCase();
     const amountStr = String(cost.amount ?? "").toLowerCase();
 
+    // Тук вече търсим и в "applies" (EV/ICE/Both/Other)
     return (
       date.includes(q) ||
       cat.includes(q) ||
       note.includes(q) ||
-      amountStr.includes(q)
+      amountStr.includes(q) ||
+      appliesRaw.includes(q)
     );
   }
 
-  // ------- render costs (с текстов филтър + Filter active) -------
+  // ------- render costs -------
 
   function renderCostTable(containerId, costs) {
     const el = document.getElementById(containerId);
@@ -334,8 +407,6 @@
         </div>
       </details>
     `;
-
-    // wiring – след като HTML вече е вкаран
 
     const txtEl = document.getElementById("costFilterText");
     const selEl = document.getElementById("costFilterApplies");
