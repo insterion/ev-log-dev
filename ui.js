@@ -166,15 +166,26 @@
     const sessions = filtered.length;
 
     const searchBlock = `
-      <div style="margin-bottom:6px;">
+      <div style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
         <input
+          id="logSearchInput"
           type="text"
-          placeholder="Search (date, type, note, £)..."
+          placeholder="Filter by date, type, note, £..."
           value="${logSearchTerm.replace(/"/g, "&quot;")}"
-          oninput="EVUI.handleLogSearch(this.value)"
+          style="flex:1;"
         />
+        <button
+          type="button"
+          style="padding:7px 10px;border-radius:18px;"
+          onclick="EVUI.applyLogSearch()"
+        >Apply</button>
+        <button
+          type="button"
+          style="padding:7px 10px;border-radius:18px;"
+          onclick="EVUI.clearLogSearch()"
+        >Clear</button>
       </div>
-    `;
+    ";
 
     const summaryBlock = `
       <details open style="margin:4px 0 8px;">
@@ -222,8 +233,16 @@
     `;
   }
 
-  function handleLogSearch(value) {
-    logSearchTerm = value || "";
+  function applyLogSearch() {
+    const inp = document.getElementById("logSearchInput");
+    logSearchTerm = inp ? inp.value || "" : "";
+    if (lastLogContainerId) {
+      renderLogTable(lastLogContainerId, lastLogEntries);
+    }
+  }
+
+  function clearLogSearch() {
+    logSearchTerm = "";
     if (lastLogContainerId) {
       renderLogTable(lastLogContainerId, lastLogEntries);
     }
@@ -339,13 +358,24 @@
     `;
 
     const searchBlock = `
-      <div style="margin-bottom:6px;">
+      <div style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
         <input
+          id="costSearchInput"
           type="text"
-          placeholder="Search (date, category, note, £, EV/ICE)..."
+          placeholder="Filter by date, category, note, £, EV/ICE..."
           value="${costSearchTerm.replace(/"/g, "&quot;")}"
-          oninput="EVUI.handleCostSearch(this.value)"
+          style="flex:1;"
         />
+        <button
+          type="button"
+          style="padding:7px 10px;border-radius:18px;"
+          onclick="EVUI.applyCostSearch()"
+        >Apply</button>
+        <button
+          type="button"
+          style="padding:7px 10px;border-radius:18px;"
+          onclick="EVUI.clearCostSearch()"
+        >Clear</button>
       </div>
     `;
 
@@ -420,8 +450,16 @@
     `;
   }
 
-  function handleCostSearch(value) {
-    costSearchTerm = value || "";
+  function applyCostSearch() {
+    const inp = document.getElementById("costSearchInput");
+    costSearchTerm = inp ? inp.value || "" : "";
+    if (lastCostContainerId) {
+      renderCostTable(lastCostContainerId, lastCostEntries);
+    }
+  }
+
+  function clearCostSearch() {
+    costSearchTerm = "";
     if (lastCostContainerId) {
       renderCostTable(lastCostContainerId, lastCostEntries);
     }
@@ -607,10 +645,6 @@
 
     let maintBlock = "";
     if (maintEv !== 0 || maintIce !== 0 || maintBoth !== 0 || maintOther !== 0) {
-      let diffAllText = "about the same";
-      if (diffAll > 1) diffAllText = "ICE more expensive";
-      else if (diffAll < -1) diffAllText = "EV more expensive";
-
       maintBlock = `
         <details>
           <summary style="cursor:pointer;"><strong>Maintenance (details)</strong></summary>
@@ -712,6 +746,7 @@
     `;
   }
 
+  // публичен API
   window.EVUI = {
     fmtGBP,
     fmtNum,
@@ -720,7 +755,9 @@
     renderCostTable,
     renderSummary,
     renderCompare,
-    handleLogSearch,
-    handleCostSearch
+    applyLogSearch,
+    clearLogSearch,
+    applyCostSearch,
+    clearCostSearch
   };
 })();
