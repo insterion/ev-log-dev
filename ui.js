@@ -27,48 +27,19 @@
     }, 1700);
   }
 
-  // ===== LOG FILTER STATE =====
-  let logFilterText = "";
-
-  function matchesLogFilter(entry) {
-    if (!entry) return false;
-    const q = (logFilterText || "").trim().toLowerCase();
-    if (!q) return true;
-
-    const date = (entry.date || "").toLowerCase();
-    const type = (entry.type || "").toLowerCase();
-    const note = (entry.note || "").toLowerCase();
-    const kwhStr = String(entry.kwh ?? "").toLowerCase();
-    const priceStr = String(entry.price ?? "").toLowerCase();
-    const costStr = String((entry.kwh || 0) * (entry.price || 0)).toLowerCase();
-
-    return (
-      date.includes(q) ||
-      type.includes(q) ||
-      note.includes(q) ||
-      kwhStr.includes(q) ||
-      priceStr.includes(q) ||
-      costStr.includes(q)
-    );
-  }
-
   // ------- render charging log -------
 
   function renderLogTable(containerId, entries) {
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    const allEntries = Array.isArray(entries) ? entries : [];
-
-    if (!allEntries.length) {
+    if (!entries.length) {
       el.innerHTML = "<p>No entries yet.</p>";
       return;
     }
 
-    const filtered = allEntries.filter(matchesLogFilter);
-
     // NEWEST FIRST (descending)
-    const rows = filtered
+    const rows = entries
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
       .map((e) => {
@@ -112,17 +83,9 @@
         </tr>`;
       });
 
-    const totalKwh = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCost = filtered.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
-    const sessions = filtered.length;
-
-    const hasActiveFilter = (logFilterText || "").trim() !== "";
-    const filterInfo = hasActiveFilter
-      ? `<p class="small" style="margin:4px 0 0;color:#b0b0b0;">
-           Filter active – showing <strong>${filtered.length}</strong> of
-           <strong>${allEntries.length}</strong> entries.
-         </p>`
-      : "";
+    const totalKwh = entries.reduce((s, e) => s + (e.kwh || 0), 0);
+    const totalCost = entries.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
+    const sessions = entries.length;
 
     const summaryBlock = `
       <details open style="margin:4px 0 8px;">
@@ -140,21 +103,6 @@
     `;
 
     el.innerHTML = `
-      <div style="margin:4px 0 8px;">
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          <input
-            id="logFilterText"
-            type="text"
-            placeholder="Filter by date, type, note…"
-          />
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <button type="button" id="logFilterApply">Apply</button>
-          <button type="button" id="logFilterClear">Clear</button>
-        </div>
-        ${filterInfo}
-      </div>
-
       ${summaryBlock}
       <table>
         <thead>
@@ -182,58 +130,6 @@
         </tfoot>
       </table>
     `;
-
-    const txtEl = document.getElementById("logFilterText");
-    const applyBtn = document.getElementById("logFilterApply");
-    const clearBtn = document.getElementById("logFilterClear");
-
-    if (txtEl) txtEl.value = logFilterText;
-
-    if (applyBtn) {
-      applyBtn.addEventListener("click", () => {
-        logFilterText = txtEl ? txtEl.value.trim() : "";
-        renderLogTable(containerId, allEntries);
-      });
-    }
-
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        logFilterText = "";
-        renderLogTable(containerId, allEntries);
-      });
-    }
-  }
-
-  // ===== COSTS FILTER STATE =====
-  let costFilterText = "";
-  let costFilterApplies = "all"; // all | ev | ice | both | other
-
-  function matchesCostFilter(cost) {
-    if (!cost) return false;
-
-    const appliesRaw = (cost.applies || "other").toLowerCase();
-
-    // dropdown filter
-    if (costFilterApplies !== "all" && appliesRaw !== costFilterApplies) {
-      return false;
-    }
-
-    const q = (costFilterText || "").trim().toLowerCase();
-    if (!q) return true;
-
-    const date = (cost.date || "").toLowerCase();
-    const cat = (cost.category || "").toLowerCase();
-    const note = (cost.note || "").toLowerCase();
-    const amountStr = String(cost.amount ?? "").toLowerCase();
-
-    // Тук вече търсим и в "applies" (EV/ICE/Both/Other)
-    return (
-      date.includes(q) ||
-      cat.includes(q) ||
-      note.includes(q) ||
-      amountStr.includes(q) ||
-      appliesRaw.includes(q)
-    );
   }
 
   // ------- render costs -------
@@ -242,19 +138,18 @@
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    const allCosts = Array.isArray(costs) ? costs : [];
-
-    if (!allCosts.length) {
+    if (!costs.length) {
       el.innerHTML = "<p>No costs yet.</p>";
       return;
     }
 
-    const filtered = allCosts.filter(matchesCostFilter);
-
     // NEWEST FIRST (descending)
-    const sorted = filtered
+    const sorted = costs
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    // ще събираме тоталите по vehicle: EV / ICE / Both / Other
+    const vehicleMap = new Map();
 
     const rows = sorted.map((c) => {
       const safeNote = c.note ? c.note.replace(/</g, "&lt;") : "";
@@ -266,6 +161,11 @@
       else if (appliesRaw === "ice") appliesLabel = "ICE";
       else if (appliesRaw === "both") appliesLabel = "Both";
       else appliesLabel = "Other";
+
+      // акумулираме тоталите по vehicle
+      const key = appliesLabel; // EV / ICE / Both / Other
+      const prev = vehicleMap.get(key) || 0;
+      vehicleMap.set(key, prev + (c.amount || 0));
 
       return `<tr>
         <td>${fmtDate(c.date)}</td>
@@ -296,7 +196,7 @@
 
     const total = sorted.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category (for filtered data)
+    // totals by category (unchanged)
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -311,18 +211,20 @@
           <td>${cat}</td>
           <td>${fmtGBP(sum)}</td>
         </tr>`
-      );
+      )
+      .join("");
 
-    const hasActiveFilter =
-      (costFilterText && costFilterText.trim() !== "") ||
-      (costFilterApplies && costFilterApplies !== "all");
-
-    const filterInfo = hasActiveFilter
-      ? `<p class="small" style="margin:4px 0 0;color:#b0b0b0;">
-           Filter active – showing <strong>${filtered.length}</strong> of
-           <strong>${allCosts.length}</strong> costs.
-         </p>`
-      : "";
+    // NEW: totals by vehicle (EV / ICE / Both / Other)
+    const vehOrder = ["EV", "ICE", "Both", "Other"];
+    const vehRows = vehOrder
+      .map((label) => {
+        const sum = vehicleMap.get(label) || 0;
+        return `<tr>
+          <td>${label}</td>
+          <td>${fmtGBP(sum)}</td>
+        </tr>`;
+      })
+      .join("");
 
     const legend = `
       <p class="small" style="margin-top:8px;line-height:1.35;">
@@ -335,28 +237,6 @@
     `;
 
     el.innerHTML = `
-      <div style="margin:4px 0 6px;">
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          <input
-            id="costFilterText"
-            type="text"
-            placeholder="Filter by date, category, note, amount…"
-          />
-          <select id="costFilterApplies">
-            <option value="all">For: All</option>
-            <option value="ev">For: EV</option>
-            <option value="ice">For: ICE</option>
-            <option value="both">For: Both</option>
-            <option value="other">For: Other</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <button type="button" id="costFilterApply">Apply</button>
-          <button type="button" id="costFilterClear">Clear</button>
-        </div>
-        ${filterInfo}
-      </div>
-
       <table>
         <thead>
           <tr>
@@ -394,7 +274,24 @@
               </tr>
             </thead>
             <tbody>
-              ${catRows.join("")}
+              ${catRows}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details style="margin-top:10px;" open>
+        <summary style="cursor:pointer;"><strong>Totals by vehicle</strong></summary>
+        <div style="margin-top:6px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Vehicle</th>
+                <th>Total £</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${vehRows}
             </tbody>
           </table>
         </div>
@@ -407,30 +304,6 @@
         </div>
       </details>
     `;
-
-    const txtEl = document.getElementById("costFilterText");
-    const selEl = document.getElementById("costFilterApplies");
-    const applyBtn = document.getElementById("costFilterApply");
-    const clearBtn = document.getElementById("costFilterClear");
-
-    if (txtEl) txtEl.value = costFilterText;
-    if (selEl) selEl.value = costFilterApplies;
-
-    if (applyBtn) {
-      applyBtn.addEventListener("click", () => {
-        costFilterText = txtEl ? txtEl.value.trim() : "";
-        costFilterApplies = selEl ? selEl.value : "all";
-        renderCostTable(containerId, allCosts);
-      });
-    }
-
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        costFilterText = "";
-        costFilterApplies = "all";
-        renderCostTable(containerId, allCosts);
-      });
-    }
   }
 
   // ------- render summary (COMPACT + COLLAPSIBLE) -------
@@ -449,7 +322,9 @@
       const count = data.count != null ? data.count : null;
 
       const avgPrice =
-        data.avgPrice && data.avgPrice > 0 ? `£${data.avgPrice.toFixed(3)}/kWh` : null;
+        data.avgPrice && data.avgPrice > 0
+          ? `£${data.avgPrice.toFixed(3)}/kWh`
+          : null;
 
       const perDay =
         data.perDay && data.perDay > 0 ? fmtGBP(data.perDay) + "/day" : null;
@@ -611,6 +486,10 @@
 
     let maintBlock = "";
     if (maintEv !== 0 || maintIce !== 0 || maintBoth !== 0 || maintOther !== 0) {
+      let diffAllText = "about the same";
+      if (diffAll > 1) diffAllText = "ICE more expensive";
+      else if (diffAll < -1) diffAllText = "EV more expensive";
+
       maintBlock = `
         <details>
           <summary style="cursor:pointer;"><strong>Maintenance (details)</strong></summary>
