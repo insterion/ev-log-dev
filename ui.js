@@ -27,19 +27,97 @@
     }, 1700);
   }
 
+  // ---------- internal state for search -----------
+
+  let lastLogEntries = [];
+  let lastLogContainerId = null;
+  let logSearchTerm = "";
+
+  let lastCostEntries = [];
+  let lastCostContainerId = null;
+  let costSearchTerm = "";
+
+  function normalizeSearchTerm(term) {
+    return (term || "").trim().toLowerCase();
+  }
+
+  function matchesLogRow(e, term) {
+    if (!term) return true;
+    const t = normalizeSearchTerm(term);
+    if (!t) return true;
+
+    const date = (e.date || "").toLowerCase();
+    const kwh = String(e.kwh ?? "").toLowerCase();
+    const price = String(e.price ?? "").toLowerCase();
+    const note = (e.note || "").toLowerCase();
+    const typeLabel =
+      e.type === "public"
+        ? "public"
+        : e.type === "public-xp"
+        ? "public xp"
+        : e.type === "home"
+        ? "home"
+        : "home xp";
+
+    const costVal = (e.kwh || 0) * (e.price || 0);
+    const costStr = costVal.toString().toLowerCase();
+
+    return (
+      date.includes(t) ||
+      kwh.includes(t) ||
+      price.includes(t) ||
+      note.includes(t) ||
+      typeLabel.includes(t) ||
+      costStr.includes(t)
+    );
+  }
+
+  function matchesCostRow(c, term) {
+    if (!term) return true;
+    const t = normalizeSearchTerm(term);
+    if (!t) return true;
+
+    const date = (c.date || "").toLowerCase();
+    const cat = (c.category || "").toLowerCase();
+    const note = (c.note || "").toLowerCase();
+    const amountStr = String(c.amount ?? "").toLowerCase();
+
+    const appliesRaw = (c.applies || "other").toLowerCase();
+    let appliesLabel = "other";
+    if (appliesRaw === "ev") appliesLabel = "ev";
+    else if (appliesRaw === "ice") appliesLabel = "ice";
+    else if (appliesRaw === "both") appliesLabel = "both";
+    else appliesLabel = "other";
+
+    return (
+      date.includes(t) ||
+      cat.includes(t) ||
+      note.includes(t) ||
+      amountStr.includes(t) ||
+      appliesLabel.includes(t)
+    );
+  }
+
   // ------- render charging log -------
 
   function renderLogTable(containerId, entries) {
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    if (!entries.length) {
+    // запомняме последния контейнер и списък за търсачката
+    lastLogContainerId = containerId;
+    lastLogEntries = Array.isArray(entries) ? entries : [];
+
+    if (!lastLogEntries.length) {
       el.innerHTML = "<p>No entries yet.</p>";
       return;
     }
 
+    const term = logSearchTerm;
+    const filtered = lastLogEntries.filter((e) => matchesLogRow(e, term));
+
     // NEWEST FIRST (descending)
-    const rows = entries
+    const rows = filtered
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
       .map((e) => {
@@ -83,9 +161,20 @@
         </tr>`;
       });
 
-    const totalKwh = entries.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCost = entries.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
-    const sessions = entries.length;
+    const totalKwh = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
+    const totalCost = filtered.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
+    const sessions = filtered.length;
+
+    const searchBlock = `
+      <div style="margin-bottom:6px;">
+        <input
+          type="text"
+          placeholder="Search (date, type, note, £)..."
+          value="${logSearchTerm.replace(/"/g, "&quot;")}"
+          oninput="EVUI.handleLogSearch(this.value)"
+        />
+      </div>
+    `;
 
     const summaryBlock = `
       <details open style="margin:4px 0 8px;">
@@ -103,6 +192,7 @@
     `;
 
     el.innerHTML = `
+      ${searchBlock}
       ${summaryBlock}
       <table>
         <thead>
@@ -132,23 +222,36 @@
     `;
   }
 
+  function handleLogSearch(value) {
+    logSearchTerm = value || "";
+    if (lastLogContainerId) {
+      renderLogTable(lastLogContainerId, lastLogEntries);
+    }
+  }
+
   // ------- render costs -------
 
   function renderCostTable(containerId, costs) {
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    if (!costs.length) {
+    lastCostContainerId = containerId;
+    lastCostEntries = Array.isArray(costs) ? costs : [];
+
+    if (!lastCostEntries.length) {
       el.innerHTML = "<p>No costs yet.</p>";
       return;
     }
 
+    const term = costSearchTerm;
+    const filtered = lastCostEntries.filter((c) => matchesCostRow(c, term));
+
     // NEWEST FIRST (descending)
-    const sorted = costs
+    const sorted = filtered
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-    // ще събираме тоталите по vehicle: EV / ICE / Both / Other
+    // totals by vehicle
     const vehicleMap = new Map();
 
     const rows = sorted.map((c) => {
@@ -162,8 +265,7 @@
       else if (appliesRaw === "both") appliesLabel = "Both";
       else appliesLabel = "Other";
 
-      // акумулираме тоталите по vehicle
-      const key = appliesLabel; // EV / ICE / Both / Other
+      const key = appliesLabel;
       const prev = vehicleMap.get(key) || 0;
       vehicleMap.set(key, prev + (c.amount || 0));
 
@@ -196,7 +298,7 @@
 
     const total = sorted.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category (unchanged)
+    // totals by category
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -214,7 +316,7 @@
       )
       .join("");
 
-    // NEW: totals by vehicle (EV / ICE / Both / Other)
+    // totals by vehicle
     const vehOrder = ["EV", "ICE", "Both", "Other"];
     const vehRows = vehOrder
       .map((label) => {
@@ -236,7 +338,19 @@
       </p>
     `;
 
+    const searchBlock = `
+      <div style="margin-bottom:6px;">
+        <input
+          type="text"
+          placeholder="Search (date, category, note, £, EV/ICE)..."
+          value="${costSearchTerm.replace(/"/g, "&quot;")}"
+          oninput="EVUI.handleCostSearch(this.value)"
+        />
+      </div>
+    `;
+
     el.innerHTML = `
+      ${searchBlock}
       <table>
         <thead>
           <tr>
@@ -304,6 +418,13 @@
         </div>
       </details>
     `;
+  }
+
+  function handleCostSearch(value) {
+    costSearchTerm = value || "";
+    if (lastCostContainerId) {
+      renderCostTable(lastCostContainerId, lastCostEntries);
+    }
   }
 
   // ------- render summary (COMPACT + COLLAPSIBLE) -------
@@ -598,6 +719,8 @@
     renderLogTable,
     renderCostTable,
     renderSummary,
-    renderCompare
+    renderCompare,
+    handleLogSearch,
+    handleCostSearch
   };
 })();
