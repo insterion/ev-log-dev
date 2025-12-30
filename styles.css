@@ -309,3 +309,35 @@ tr.total-row {
 .filter-indicator {
   margin: 4px 0 0;
 }
+/* Small action buttons inside tables */
+.actcol {
+  white-space: nowrap;
+}
+
+.btn-mini {
+  border-radius: 999px;
+  border: 1px solid #444;
+  background: #151515;
+  color: #f5f5f5;
+  padding: 4px 9px;
+  margin: 0 2px;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-mini .ico {
+  margin-right: 3px;
+}
+
+.btn-mini.danger {
+  border-color: #c0392b;
+  color: #ffb3b3;
+  background: #200808;
+}
+
+.btn-mini.danger:active {
+  transform: scale(0.96);
+  background: #2a0a0a;
+}
