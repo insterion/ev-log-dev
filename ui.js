@@ -27,75 +27,53 @@
     }, 1700);
   }
 
-  // ---------- internal state for search -----------
-
-  let lastLogEntries = [];
-  let lastLogContainerId = null;
+  // --- simple search state for Log ---
   let logSearchTerm = "";
 
-  let lastCostEntries = [];
-  let lastCostContainerId = null;
-  let costSearchTerm = "";
+  function filterLogEntries(entries) {
+    const q = (logSearchTerm || "").trim().toLowerCase();
+    if (!q) return entries;
 
-  function normalizeSearchTerm(term) {
-    return (term || "").trim().toLowerCase();
+    return entries.filter((e) => {
+      if (!e) return false;
+      const date = (e.date || "").toLowerCase();
+      const kwh = String(e.kwh ?? "").toLowerCase();
+      const price = String(e.price ?? "").toLowerCase();
+      const type = (e.type || "").toLowerCase();
+      const note = (e.note || "").toLowerCase();
+
+      return (
+        date.includes(q) ||
+        kwh.includes(q) ||
+        price.includes(q) ||
+        type.includes(q) ||
+        note.includes(q)
+      );
+    });
   }
 
-  function matchesLogRow(e, term) {
-    if (!term) return true;
-    const t = normalizeSearchTerm(term);
-    if (!t) return true;
+  function applyLogSearch() {
+    const input = document.getElementById("logSearchInput");
+    if (!input) return;
+    logSearchTerm = input.value || "";
 
-    const date = (e.date || "").toLowerCase();
-    const kwh = String(e.kwh ?? "").toLowerCase();
-    const price = String(e.price ?? "").toLowerCase();
-    const note = (e.note || "").toLowerCase();
-    const typeLabel =
-      e.type === "public"
-        ? "public"
-        : e.type === "public-xp"
-        ? "public xp"
-        : e.type === "home"
-        ? "home"
-        : "home xp";
+    if (!window.EVData) return;
+    const state = window.EVData.loadState();
+    if (!state || !Array.isArray(state.entries)) return;
 
-    const costVal = (e.kwh || 0) * (e.price || 0);
-    const costStr = costVal.toString().toLowerCase();
-
-    return (
-      date.includes(t) ||
-      kwh.includes(t) ||
-      price.includes(t) ||
-      note.includes(t) ||
-      typeLabel.includes(t) ||
-      costStr.includes(t)
-    );
+    renderLogTable("logTable", state.entries);
   }
 
-  function matchesCostRow(c, term) {
-    if (!term) return true;
-    const t = normalizeSearchTerm(term);
-    if (!t) return true;
+  function clearLogSearch() {
+    logSearchTerm = "";
+    const input = document.getElementById("logSearchInput");
+    if (input) input.value = "";
 
-    const date = (c.date || "").toLowerCase();
-    const cat = (c.category || "").toLowerCase();
-    const note = (c.note || "").toLowerCase();
-    const amountStr = String(c.amount ?? "").toLowerCase();
+    if (!window.EVData) return;
+    const state = window.EVData.loadState();
+    if (!state || !Array.isArray(state.entries)) return;
 
-    const appliesRaw = (c.applies || "other").toLowerCase();
-    let appliesLabel = "other";
-    if (appliesRaw === "ev") appliesLabel = "ev";
-    else if (appliesRaw === "ice") appliesLabel = "ice";
-    else if (appliesRaw === "both") appliesLabel = "both";
-    else appliesLabel = "other";
-
-    return (
-      date.includes(t) ||
-      cat.includes(t) ||
-      note.includes(t) ||
-      amountStr.includes(t) ||
-      appliesLabel.includes(t)
-    );
+    renderLogTable("logTable", state.entries);
   }
 
   // ------- render charging log -------
@@ -104,66 +82,101 @@
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    // запомняме последния контейнер и списък за търсачката
-    lastLogContainerId = containerId;
-    lastLogEntries = Array.isArray(entries) ? entries : [];
-
-    if (!lastLogEntries.length) {
+    if (!entries.length) {
       el.innerHTML = "<p>No entries yet.</p>";
       return;
     }
 
-    const term = logSearchTerm;
-    const filtered = lastLogEntries.filter((e) => matchesLogRow(e, term));
-
-    // NEWEST FIRST (descending)
-    const rows = filtered
+    // newest first
+    const allSorted = entries
       .slice()
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-      .map((e) => {
-        const typeLabel =
-          e.type === "public"
-            ? "Public"
-            : e.type === "public-xp"
-            ? "Public xp"
-            : e.type === "home"
-            ? "Home"
-            : "Home xp";
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-        const cost = e.kwh * e.price;
-        const safeNote = e.note ? e.note.replace(/</g, "&lt;") : "";
-        const idAttr = e.id ? String(e.id) : "";
+    const filtered = filterLogEntries(allSorted);
 
-        return `<tr>
-          <td>${fmtDate(e.date)}</td>
-          <td>${fmtNum(e.kwh, 1)}</td>
-          <td><span class="badge">${typeLabel}</span></td>
-          <td>${fmtGBP(cost)}</td>
-          <td>${safeNote}</td>
-          <td class="actcol">
-            <button
-              type="button"
-              class="btn-mini"
-              data-action="edit-entry"
-              data-id="${idAttr}"
-              title="Edit this entry"
-              aria-label="Edit"
-            ><span class="ico">✎</span><span class="txt"> Edit</span></button>
-            <button
-              type="button"
-              class="btn-mini danger"
-              data-action="delete-entry"
-              data-id="${idAttr}"
-              title="Delete this entry"
-              aria-label="Delete"
-            >✕</button>
-          </td>
-        </tr>`;
-      });
+    const rows = filtered.map((e) => {
+      const typeLabel =
+        e.type === "public"
+          ? "Public"
+          : e.type === "public-xp"
+          ? "Public xp"
+          : e.type === "home"
+          ? "Home"
+          : "Home xp";
 
-    const totalKwh = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
-    const totalCost = filtered.reduce((s, e) => s + (e.kwh * e.price || 0), 0);
-    const sessions = filtered.length;
+      const cost = (e.kwh || 0) * (e.price || 0);
+      const safeNote = e.note ? e.note.replace(/</g, "&lt;") : "";
+      const idAttr = e.id ? String(e.id) : "";
+
+      return `<tr>
+        <td>${fmtDate(e.date)}</td>
+        <td>${fmtNum(e.kwh, 1)}</td>
+        <td><span class="badge">${typeLabel}</span></td>
+        <td>${fmtGBP(cost)}</td>
+        <td>${safeNote}</td>
+        <td class="actcol">
+          <button
+            type="button"
+            class="btn-mini"
+            data-action="edit-entry"
+            data-id="${idAttr}"
+            title="Edit this entry"
+            aria-label="Edit"
+          ><span class="ico">✎</span><span class="txt"> Edit</span></button>
+          <button
+            type="button"
+            class="btn-mini danger"
+            data-action="delete-entry"
+            data-id="${idAttr}"
+            title="Delete this entry"
+            aria-label="Delete"
+          >✕</button>
+        </td>
+      </tr>`;
+    });
+
+    const totalKwhAll = allSorted.reduce((s, e) => s + (e.kwh || 0), 0);
+    const totalCostAll = allSorted.reduce(
+      (s, e) => s + ((e.kwh || 0) * (e.price || 0)),
+      0
+    );
+    const sessionsAll = allSorted.length;
+
+    const totalKwhFiltered = filtered.reduce((s, e) => s + (e.kwh || 0), 0);
+    const totalCostFiltered = filtered.reduce(
+      (s, e) => s + ((e.kwh || 0) * (e.price || 0)),
+      0
+    );
+
+    const summaryBlock = `
+      <details open style="margin:4px 0 8px;">
+        <summary style="cursor:pointer;color:#cccccc;">
+          <strong>Total so far</strong>
+        </summary>
+        <div style="margin-top:6px;font-size:0.85rem;color:#cccccc;">
+          <p style="margin:0;">
+            All: <strong>${fmtNum(totalKwhAll, 1)} kWh</strong> •
+            <strong>${fmtGBP(totalCostAll)}</strong> •
+            <strong>${sessionsAll}</strong> sessions
+          </p>
+          ${
+            logSearchTerm
+              ? `<p style="margin:4px 0 0;font-size:0.8rem;color:#bbbbbb;">
+                   Filter: "<strong>${logSearchTerm.replace(
+                     /</g,
+                     "&lt;"
+                   )}</strong>" → <strong>${fmtNum(
+                  totalKwhFiltered,
+                  1
+                )} kWh</strong> • <strong>${fmtGBP(
+                  totalCostFiltered
+                )}</strong>
+                 </p>`
+              : ""
+          }
+        </div>
+      </details>
+    `;
 
     const searchBlock = `
       <div style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
@@ -185,26 +198,15 @@
           onclick="EVUI.clearLogSearch()"
         >Clear</button>
       </div>
-    ";
-
-    const summaryBlock = `
-      <details open style="margin:4px 0 8px;">
-        <summary style="cursor:pointer;color:#cccccc;">
-          <strong>Total so far</strong>
-        </summary>
-        <div style="margin-top:6px;font-size:0.85rem;color:#cccccc;">
-          <p style="margin:0;">
-            <strong>${fmtNum(totalKwh, 1)} kWh</strong> •
-            <strong>${fmtGBP(totalCost)}</strong> •
-            <strong>${sessions}</strong> sessions
-          </p>
-        </div>
-      </details>
     `;
 
-    el.innerHTML = `
-      ${searchBlock}
-      ${summaryBlock}
+    const tipBlock = `
+      <p class="small" style="margin:0 0 4px;color:#999;">
+        Tip: type "home", "public", a date like 2025-12-27, or any word from your note.
+      </p>
+    `;
+
+    const tableHtml = `
       <table>
         <thead>
           <tr>
@@ -222,30 +224,17 @@
         <tfoot>
           <tr class="total-row">
             <td>Total</td>
-            <td>${fmtNum(totalKwh, 1)}</td>
+            <td>${fmtNum(totalKwhFiltered, 1)}</td>
             <td></td>
-            <td>${fmtGBP(totalCost)}</td>
+            <td>${fmtGBP(totalCostFiltered)}</td>
             <td></td>
             <td class="actcol"></td>
           </tr>
         </tfoot>
       </table>
     `;
-  }
 
-  function applyLogSearch() {
-    const inp = document.getElementById("logSearchInput");
-    logSearchTerm = inp ? inp.value || "" : "";
-    if (lastLogContainerId) {
-      renderLogTable(lastLogContainerId, lastLogEntries);
-    }
-  }
-
-  function clearLogSearch() {
-    logSearchTerm = "";
-    if (lastLogContainerId) {
-      renderLogTable(lastLogContainerId, lastLogEntries);
-    }
+    el.innerHTML = summaryBlock + searchBlock + tipBlock + tableHtml;
   }
 
   // ------- render costs -------
@@ -254,24 +243,14 @@
     const el = document.getElementById(containerId);
     if (!el) return;
 
-    lastCostContainerId = containerId;
-    lastCostEntries = Array.isArray(costs) ? costs : [];
-
-    if (!lastCostEntries.length) {
+    if (!costs.length) {
       el.innerHTML = "<p>No costs yet.</p>";
       return;
     }
 
-    const term = costSearchTerm;
-    const filtered = lastCostEntries.filter((c) => matchesCostRow(c, term));
-
-    // NEWEST FIRST (descending)
-    const sorted = filtered
+    const sorted = costs
       .slice()
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-
-    // totals by vehicle
-    const vehicleMap = new Map();
 
     const rows = sorted.map((c) => {
       const safeNote = c.note ? c.note.replace(/</g, "&lt;") : "";
@@ -283,10 +262,6 @@
       else if (appliesRaw === "ice") appliesLabel = "ICE";
       else if (appliesRaw === "both") appliesLabel = "Both";
       else appliesLabel = "Other";
-
-      const key = appliesLabel;
-      const prev = vehicleMap.get(key) || 0;
-      vehicleMap.set(key, prev + (c.amount || 0));
 
       return `<tr>
         <td>${fmtDate(c.date)}</td>
@@ -317,7 +292,6 @@
 
     const total = sorted.reduce((s, c) => s + (c.amount || 0), 0);
 
-    // totals by category
     const catMap = new Map();
     for (const c of sorted) {
       const key = c.category || "Other";
@@ -332,20 +306,7 @@
           <td>${cat}</td>
           <td>${fmtGBP(sum)}</td>
         </tr>`
-      )
-      .join("");
-
-    // totals by vehicle
-    const vehOrder = ["EV", "ICE", "Both", "Other"];
-    const vehRows = vehOrder
-      .map((label) => {
-        const sum = vehicleMap.get(label) || 0;
-        return `<tr>
-          <td>${label}</td>
-          <td>${fmtGBP(sum)}</td>
-        </tr>`;
-      })
-      .join("");
+      );
 
     const legend = `
       <p class="small" style="margin-top:8px;line-height:1.35;">
@@ -357,30 +318,7 @@
       </p>
     `;
 
-    const searchBlock = `
-      <div style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
-        <input
-          id="costSearchInput"
-          type="text"
-          placeholder="Filter by date, category, note, £, EV/ICE..."
-          value="${costSearchTerm.replace(/"/g, "&quot;")}"
-          style="flex:1;"
-        />
-        <button
-          type="button"
-          style="padding:7px 10px;border-radius:18px;"
-          onclick="EVUI.applyCostSearch()"
-        >Apply</button>
-        <button
-          type="button"
-          style="padding:7px 10px;border-radius:18px;"
-          onclick="EVUI.clearCostSearch()"
-        >Clear</button>
-      </div>
-    `;
-
     el.innerHTML = `
-      ${searchBlock}
       <table>
         <thead>
           <tr>
@@ -418,24 +356,7 @@
               </tr>
             </thead>
             <tbody>
-              ${catRows}
-            </tbody>
-          </table>
-        </div>
-      </details>
-
-      <details style="margin-top:10px;" open>
-        <summary style="cursor:pointer;"><strong>Totals by vehicle</strong></summary>
-        <div style="margin-top:6px;">
-          <table>
-            <thead>
-              <tr>
-                <th>Vehicle</th>
-                <th>Total £</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${vehRows}
+              ${catRows.join("")}
             </tbody>
           </table>
         </div>
@@ -450,22 +371,7 @@
     `;
   }
 
-  function applyCostSearch() {
-    const inp = document.getElementById("costSearchInput");
-    costSearchTerm = inp ? inp.value || "" : "";
-    if (lastCostContainerId) {
-      renderCostTable(lastCostContainerId, lastCostEntries);
-    }
-  }
-
-  function clearCostSearch() {
-    costSearchTerm = "";
-    if (lastCostContainerId) {
-      renderCostTable(lastCostContainerId, lastCostEntries);
-    }
-  }
-
-  // ------- render summary (COMPACT + COLLAPSIBLE) -------
+  // ------- render summary (compact + collapsible) -------
 
   function renderSummary(containerIds, summary) {
     const [idThis, idLast, idAvg] = containerIds.map((id) =>
@@ -481,9 +387,7 @@
       const count = data.count != null ? data.count : null;
 
       const avgPrice =
-        data.avgPrice && data.avgPrice > 0
-          ? `£${data.avgPrice.toFixed(3)}/kWh`
-          : null;
+        data.avgPrice && data.avgPrice > 0 ? `£${data.avgPrice.toFixed(3)}/kWh` : null;
 
       const perDay =
         data.perDay && data.perDay > 0 ? fmtGBP(data.perDay) + "/day" : null;
@@ -542,7 +446,7 @@
     `;
   }
 
-  // ------- render compare (CLEAN + COLLAPSIBLE) -------
+  // ------- render compare (stable version) -------
 
   function renderCompare(containerId, data) {
     const el = document.getElementById(containerId);
@@ -560,7 +464,6 @@
 
     const diffEnergy = data.iceCost - data.evCost;
 
-    // maintenance / all-in
     const maintEv = Number(data.maintEv ?? 0);
     const maintIce = Number(data.maintIce ?? 0);
     const maintBoth = Number(data.maintBoth ?? 0);
@@ -570,7 +473,6 @@
     const iceTotalAll = data.iceCost + maintIce;
     const diffAll = iceTotalAll - evTotalAll;
 
-    // insurance
     const insEv = Number(data.insuranceEv ?? 0);
     const insIce = Number(data.insuranceIce ?? 0);
     const insBoth = Number(data.insuranceBoth ?? 0);
@@ -578,7 +480,6 @@
     const insTotal = Number(data.insuranceTotal ?? 0);
     const insDiff = insIce - insEv;
 
-    // ---- Quick summary (always visible) ----
     let topSummary = "";
     if (miles > 0) {
       const per1000Ev = evPerMile * 1000;
@@ -610,7 +511,6 @@
       `;
     }
 
-    // ---- Energy explanation (short) ----
     let energyExplain = "";
     if (diffEnergy > 1) {
       energyExplain = `ICE would cost <strong>${fmtGBP(
@@ -645,6 +545,10 @@
 
     let maintBlock = "";
     if (maintEv !== 0 || maintIce !== 0 || maintBoth !== 0 || maintOther !== 0) {
+      let diffAllText = "about the same";
+      if (diffAll > 1) diffAllText = "ICE more expensive";
+      else if (diffAll < -1) diffAllText = "EV more expensive";
+
       maintBlock = `
         <details>
           <summary style="cursor:pointer;"><strong>Maintenance (details)</strong></summary>
@@ -746,7 +650,6 @@
     `;
   }
 
-  // публичен API
   window.EVUI = {
     fmtGBP,
     fmtNum,
@@ -756,8 +659,6 @@
     renderSummary,
     renderCompare,
     applyLogSearch,
-    clearLogSearch,
-    applyCostSearch,
-    clearCostSearch
+    clearLogSearch
   };
 })();
