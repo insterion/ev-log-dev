@@ -854,5 +854,26 @@
     resetCostEditMode();
   }
 
+  // ---------- expose core pieces for future splitting ----------
+
+  window.EVApp = {
+    state,
+    todayISO,
+    autoPriceForType,
+    computeMaintenanceTotals,
+    computeMaintenanceTotalAllTime,
+    computeInsuranceTotals,
+    renderAll,
+    onAddEntry,
+    onSameAsLast,
+    onAddCost,
+    handleDeleteEntry,
+    handleDeleteCost,
+    exportEntriesCSV,
+    exportCostsCSV,
+    exportBackup,
+    importBackup
+  };
+
   wire();
 })();
