@@ -1,4 +1,5 @@
 // app.js – main wiring for EV Log (with "applies to" + EV/ICE maintenance + Costs filter + Insurance breakdown)
+// + Period selector (Costs) + Summary "Selected period" block
 
 (function () {
   const D = window.EVData;
@@ -11,6 +12,12 @@
   let currentEditId = null;      // charging entry id being edited
   let currentEditCostId = null;  // cost id being edited
 
+  // ---------- UI state defaults (period selector) ----------
+  if (!state.ui) state.ui = {};
+  if (!state.ui.periodMode) state.ui.periodMode = "this-month"; // this-month | last-month | last-30 | custom | all-time
+  if (!state.ui.periodFrom) state.ui.periodFrom = "";
+  if (!state.ui.periodTo) state.ui.periodTo = "";
+
   // ---------- normalise existing costs (backwards compatibility) ----------
 
   function ensureCostAppliesDefaults() {
@@ -18,6 +25,7 @@
     for (const c of state.costs) {
       if (!c) continue;
       if (!c.applies) {
+        // старите записи по подразбиране – other
         c.applies = "other";
       } else {
         c.applies = String(c.applies).toLowerCase();
@@ -45,18 +53,6 @@
     btns.forEach((b) =>
       b.addEventListener("click", () => activate(b.dataset.tab))
     );
-
-    // expose for other modules (optional)
-    window.EVTabs = { activate };
-
-    // listen for UI requests (e.g. Summary -> Compare)
-    window.addEventListener("ev:goTab", (ev) => {
-      const tab = ev && ev.detail && ev.detail.tab ? String(ev.detail.tab) : "";
-      if (!tab) return;
-      activate(tab);
-      // small UX: scroll to top of page
-      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) { window.scrollTo(0, 0); }
-    });
 
     activate("log");
   }
@@ -109,19 +105,29 @@
   function resetEditMode() {
     currentEditId = null;
     const addBtn = $("addEntry");
-    if (addBtn) addBtn.textContent = "Add entry";
+    if (addBtn) {
+      addBtn.textContent = "Add entry";
+    }
   }
 
   function resetCostEditMode() {
     currentEditCostId = null;
     const btn = $("c_add");
-    if (btn) btn.textContent = "Add cost";
+    if (btn) {
+      btn.textContent = "Add cost";
+    }
   }
 
   function startEditEntry(id) {
-    if (!id) return U.toast("Missing entry id", "bad");
+    if (!id) {
+      U.toast("Missing entry id", "bad");
+      return;
+    }
     const entry = state.entries.find((e) => e.id === id);
-    if (!entry) return U.toast("Entry not found", "bad");
+    if (!entry) {
+      U.toast("Entry not found", "bad");
+      return;
+    }
 
     currentEditId = id;
 
@@ -132,15 +138,23 @@
     $("note").value = entry.note || "";
 
     const addBtn = $("addEntry");
-    if (addBtn) addBtn.textContent = "Update entry";
+    if (addBtn) {
+      addBtn.textContent = "Update entry";
+    }
 
     U.toast("Editing entry", "info");
   }
 
   function startEditCost(id) {
-    if (!id) return U.toast("Missing cost id", "bad");
+    if (!id) {
+      U.toast("Missing cost id", "bad");
+      return;
+    }
     const cost = state.costs.find((c) => c.id === id);
-    if (!cost) return U.toast("Cost not found", "bad");
+    if (!cost) {
+      U.toast("Cost not found", "bad");
+      return;
+    }
 
     currentEditCostId = id;
 
@@ -152,11 +166,17 @@
     const appliesSelect = $("c_applies");
     if (appliesSelect) {
       const v = (cost.applies || "other").toLowerCase();
-      appliesSelect.value = (v === "ev" || v === "ice" || v === "both" || v === "other") ? v : "other";
+      if (v === "ev" || v === "ice" || v === "both" || v === "other") {
+        appliesSelect.value = v;
+      } else {
+        appliesSelect.value = "other";
+      }
     }
 
     const btn = $("c_add");
-    if (btn) btn.textContent = "Update cost";
+    if (btn) {
+      btn.textContent = "Update cost";
+    }
 
     U.toast("Editing cost", "info");
   }
@@ -165,14 +185,115 @@
     const el = $("c_applies");
     if (!el) return "other";
     const v = (el.value || "").toLowerCase();
-    return (v === "ev" || v === "ice" || v === "both" || v === "other") ? v : "other";
+    if (v === "ev" || v === "ice" || v === "both" || v === "other") {
+      return v;
+    }
+    return "other";
+  }
+
+  // ---------- date / period helpers ----------
+
+  function clampISO(d) {
+    return (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : "";
+  }
+
+  function isoToTime(iso) {
+    // ISO date -> UTC midnight time
+    if (!iso) return NaN;
+    const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
+    if (!y || !m || !d) return NaN;
+    return Date.UTC(y, m - 1, d);
+  }
+
+  function firstDayOfMonthISO(dt) {
+    const y = dt.getUTCFullYear();
+    const m = dt.getUTCMonth(); // 0-11
+    const d = new Date(Date.UTC(y, m, 1));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function lastDayOfMonthISO(dt) {
+    const y = dt.getUTCFullYear();
+    const m = dt.getUTCMonth(); // 0-11
+    // day 0 of next month = last day of current month
+    const d = new Date(Date.UTC(y, m + 1, 0));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function getActivePeriod() {
+    const mode = (state.ui.periodMode || "this-month").toLowerCase();
+
+    if (mode === "all-time") {
+      return { mode, from: "", to: "", label: "All time" };
+    }
+
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    if (mode === "this-month") {
+      const from = firstDayOfMonthISO(todayUtc);
+      const to = lastDayOfMonthISO(todayUtc);
+      return { mode, from, to, label: `This month (${from} → ${to})` };
+    }
+
+    if (mode === "last-month") {
+      const lastMonth = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth() - 1, 15));
+      const from = firstDayOfMonthISO(lastMonth);
+      const to = lastDayOfMonthISO(lastMonth);
+      return { mode, from, to, label: `Last month (${from} → ${to})` };
+    }
+
+    if (mode === "last-30") {
+      const to = todayUtc.toISOString().slice(0, 10);
+      const fromDt = new Date(todayUtc.getTime() - 29 * 24 * 3600 * 1000);
+      const from = fromDt.toISOString().slice(0, 10);
+      return { mode, from, to, label: `Last 30 days (${from} → ${to})` };
+    }
+
+    // custom
+    const from = clampISO(state.ui.periodFrom);
+    const to = clampISO(state.ui.periodTo);
+    if (!from || !to) {
+      // fallback safe
+      const f = firstDayOfMonthISO(todayUtc);
+      const t = lastDayOfMonthISO(todayUtc);
+      return { mode: "this-month", from: f, to: t, label: `This month (${f} → ${t})` };
+    }
+
+    // ensure from <= to
+    const tf = isoToTime(from);
+    const tt = isoToTime(to);
+    if (!isNaN(tf) && !isNaN(tt) && tf > tt) {
+      return { mode: "custom", from: to, to: from, label: `Custom (${to} → ${from})` };
+    }
+
+    return { mode: "custom", from, to, label: `Custom (${from} → ${to})` };
+  }
+
+  function filterByPeriod(list, dateGetter) {
+    const p = getActivePeriod();
+    if (p.mode === "all-time") return list || [];
+
+    const fromT = isoToTime(p.from);
+    const toT = isoToTime(p.to);
+    if (isNaN(fromT) || isNaN(toT)) return list || [];
+
+    return (list || []).filter((x) => {
+      const iso = (dateGetter(x) || "");
+      const t = isoToTime(iso);
+      if (isNaN(t)) return false;
+      return t >= fromT && t <= toT;
+    });
   }
 
   // ---------- maintenance totals (all-time, split EV/ICE) ----------
 
   function computeMaintenanceTotals() {
     const costs = state.costs || [];
-    let evOnly = 0, iceOnly = 0, both = 0, other = 0;
+    let evOnly = 0;
+    let iceOnly = 0;
+    let both = 0;
+    let other = 0;
 
     for (const c of costs) {
       if (!c) continue;
@@ -180,24 +301,42 @@
       if (!amount) continue;
 
       const a = (c.applies || "other").toLowerCase();
-      if (a === "ev") evOnly += amount;
-      else if (a === "ice") iceOnly += amount;
-      else if (a === "both") both += amount;
-      else other += amount;
+      if (a === "ev") {
+        evOnly += amount;
+      } else if (a === "ice") {
+        iceOnly += amount;
+      } else if (a === "both") {
+        both += amount;
+      } else {
+        other += amount;
+      }
     }
 
     const ev = evOnly + both;
     const ice = iceOnly + both;
     const total = evOnly + iceOnly + both + other;
 
-    return { ev, ice, both, other, total };
+    return {
+      ev,
+      ice,
+      both,
+      other,
+      total
+    };
+  }
+
+  function computeMaintenanceTotalAllTime() {
+    return computeMaintenanceTotals().total;
   }
 
   // ---------- insurance totals (all-time, split EV/ICE) ----------
 
   function computeInsuranceTotals() {
     const costs = state.costs || [];
-    let evOnly = 0, iceOnly = 0, both = 0, other = 0;
+    let evOnly = 0;
+    let iceOnly = 0;
+    let both = 0;
+    let other = 0;
 
     for (const c of costs) {
       if (!c) continue;
@@ -208,17 +347,28 @@
       if (cat !== "insurance") continue;
 
       const a = (c.applies || "other").toLowerCase();
-      if (a === "ev") evOnly += amount;
-      else if (a === "ice") iceOnly += amount;
-      else if (a === "both") both += amount;
-      else other += amount;
+      if (a === "ev") {
+        evOnly += amount;
+      } else if (a === "ice") {
+        iceOnly += amount;
+      } else if (a === "both") {
+        both += amount;
+      } else {
+        other += amount;
+      }
     }
 
     const ev = evOnly + both;
     const ice = iceOnly + both;
     const total = evOnly + iceOnly + both + other;
 
-    return { ev, ice, both, other, total };
+    return {
+      ev,
+      ice,
+      both,
+      other,
+      total
+    };
   }
 
   function renderMaintenanceTotalInCosts() {
@@ -233,7 +383,9 @@
         el.id = "maintenanceTotalCosts";
         el.className = "small";
         el.style.marginTop = "6px";
-        if (container.parentNode) container.parentNode.insertBefore(el, container.nextSibling);
+        if (container.parentNode) {
+          container.parentNode.insertBefore(el, container.nextSibling);
+        }
       }
 
       const diff = totals.ev - totals.ice;
@@ -282,6 +434,7 @@
   // ---------- costs filter controls (UI) ----------
 
   function ensureCostFilterControls() {
+    // ако вече има select – не правим нищо
     if ($("c_filter_applies")) return;
 
     const container = $("costTable");
@@ -315,7 +468,9 @@
       select.appendChild(opt);
     });
 
-    select.addEventListener("change", () => renderAll());
+    select.addEventListener("change", () => {
+      renderAll();
+    });
 
     wrapper.appendChild(label);
     wrapper.appendChild(select);
@@ -327,66 +482,249 @@
     const sel = $("c_filter_applies");
     if (!sel) return "all";
     const v = (sel.value || "all").toLowerCase();
-    return (v === "ev" || v === "ice" || v === "both" || v === "other" || v === "all") ? v : "all";
+    if (v === "ev" || v === "ice" || v === "both" || v === "other" || v === "all") {
+      return v;
+    }
+    return "all";
+  }
+
+  // ---------- period controls (UI) ----------
+  function ensurePeriodControls() {
+    if ($("period_mode")) return;
+
+    const container = $("costTable");
+    if (!container || !container.parentNode) return;
+
+    const outer = document.createElement("div");
+    outer.id = "periodControls";
+    outer.style.display = "grid";
+    outer.style.gridTemplateColumns = "auto 1fr";
+    outer.style.gap = "6px";
+    outer.style.alignItems = "center";
+    outer.style.marginBottom = "6px";
+
+    const label = document.createElement("label");
+    label.setAttribute("for", "period_mode");
+    label.textContent = "Period:";
+
+    const select = document.createElement("select");
+    select.id = "period_mode";
+
+    const modes = [
+      ["this-month", "This month"],
+      ["last-month", "Last month"],
+      ["last-30", "Last 30 days"],
+      ["custom", "Custom…"],
+      ["all-time", "All time"]
+    ];
+    modes.forEach(([val, text]) => {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = text;
+      select.appendChild(opt);
+    });
+
+    select.value = state.ui.periodMode || "this-month";
+
+    // custom row
+    const customRow = document.createElement("div");
+    customRow.id = "period_custom_row";
+    customRow.style.gridColumn = "1 / -1";
+    customRow.style.display = "none";
+    customRow.style.gap = "6px";
+    customRow.style.alignItems = "center";
+
+    const from = document.createElement("input");
+    from.type = "date";
+    from.id = "period_from";
+    from.value = clampISO(state.ui.periodFrom) || "";
+
+    const to = document.createElement("input");
+    to.type = "date";
+    to.id = "period_to";
+    to.value = clampISO(state.ui.periodTo) || "";
+
+    const btnApply = document.createElement("button");
+    btnApply.type = "button";
+    btnApply.id = "period_apply";
+    btnApply.textContent = "Apply";
+
+    const btnReset = document.createElement("button");
+    btnReset.type = "button";
+    btnReset.id = "period_reset";
+    btnReset.textContent = "Reset";
+
+    customRow.appendChild(from);
+    customRow.appendChild(to);
+    customRow.appendChild(btnApply);
+    customRow.appendChild(btnReset);
+
+    // badge row
+    const badge = document.createElement("div");
+    badge.id = "period_badge";
+    badge.style.gridColumn = "1 / -1";
+    badge.style.fontSize = "0.85rem";
+    badge.style.color = "#b0b0b0";
+    badge.style.marginTop = "2px";
+
+    function refreshCustomVisibility() {
+      const mode = (select.value || "this-month").toLowerCase();
+      customRow.style.display = mode === "custom" ? "flex" : "none";
+    }
+
+    function savePeriod(mode, fromIso, toIso) {
+      state.ui.periodMode = mode;
+      state.ui.periodFrom = fromIso || "";
+      state.ui.periodTo = toIso || "";
+      D.saveState(state);
+    }
+
+    select.addEventListener("change", () => {
+      const mode = (select.value || "this-month").toLowerCase();
+      refreshCustomVisibility();
+
+      if (mode !== "custom") {
+        // for non-custom, save immediately
+        savePeriod(mode, "", "");
+        renderAll();
+      } else {
+        // custom waits for Apply
+        // but keep current selection in UI state (not saved yet) – still ok
+      }
+    });
+
+    btnApply.addEventListener("click", () => {
+      const f = clampISO(from.value);
+      const t = clampISO(to.value);
+      if (!f || !t) {
+        U.toast("Pick From and To dates", "bad");
+        return;
+      }
+      savePeriod("custom", f, t);
+      renderAll();
+      U.toast("Period applied", "good");
+    });
+
+    btnReset.addEventListener("click", () => {
+      from.value = "";
+      to.value = "";
+      savePeriod("this-month", "", "");
+      select.value = "this-month";
+      refreshCustomVisibility();
+      renderAll();
+      U.toast("Period reset", "info");
+    });
+
+    outer.appendChild(label);
+    outer.appendChild(select);
+
+    container.parentNode.insertBefore(outer, container);
+    container.parentNode.insertBefore(customRow, container);
+    container.parentNode.insertBefore(badge, container);
+
+    refreshCustomVisibility();
+  }
+
+  function renderPeriodBadge() {
+    const el = $("period_badge");
+    if (!el) return;
+    const p = getActivePeriod();
+    el.textContent = "Period active: " + (p.label || "");
+  }
+
+  // ---------- Summary: Selected period block ----------
+  function ensurePeriodSummaryBlock() {
+    const anchor = $("summary_this");
+    if (!anchor) return;
+
+    let box = $("summary_period");
+    if (box) return;
+
+    box = document.createElement("div");
+    box.id = "summary_period";
+    box.style.borderRadius = "18px";
+    box.style.border = "1px solid #222";
+    box.style.background = "#080808";
+    box.style.padding = "10px 12px";
+    box.style.marginBottom = "10px";
+    box.style.fontSize = "0.9rem";
+
+    anchor.parentNode.insertBefore(box, anchor);
+  }
+
+  function computeStatsForEntries(entries) {
+    const arr = entries || [];
+    const totalKwh = arr.reduce((s, e) => s + (Number(e.kwh) || 0), 0);
+    const totalCost = arr.reduce((s, e) => s + ((Number(e.kwh) || 0) * (Number(e.price) || 0)), 0);
+    const count = arr.length;
+
+    const avgPrice = totalKwh > 0 ? totalCost / totalKwh : 0;
+
+    // per-day in calendar range (based on active period)
+    const p = getActivePeriod();
+    let perDay = 0;
+    if (p.mode !== "all-time" && p.from && p.to) {
+      const fromT = isoToTime(p.from);
+      const toT = isoToTime(p.to);
+      if (!isNaN(fromT) && !isNaN(toT)) {
+        const days = Math.floor((toT - fromT) / (24 * 3600 * 1000)) + 1;
+        if (days > 0) perDay = totalCost / days;
+      }
+    }
+
+    return { totalKwh, totalCost, count, avgPrice, perDay };
+  }
+
+  function renderPeriodSummary(entriesForPeriod) {
+    const box = $("summary_period");
+    if (!box) return;
+
+    const p = getActivePeriod();
+    const st = computeStatsForEntries(entriesForPeriod);
+
+    box.innerHTML = `
+      <details open>
+        <summary style="cursor:pointer;"><strong>Selected period (from Costs)</strong></summary>
+        <div style="margin-top:6px;">
+          <p style="margin:0 0 4px;color:#b0b0b0;">${p.label}</p>
+          ${
+            st.count
+              ? `
+                <p style="margin:0 0 4px;">
+                  <strong>${U.fmtNum(st.totalKwh, 1)} kWh</strong> •
+                  <strong>${U.fmtGBP(st.totalCost)}</strong> •
+                  <strong>${st.count}</strong> sessions
+                </p>
+                <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
+                  Avg price: <strong style="color:#f5f5f5;">£${st.avgPrice.toFixed(3)}</strong> / kWh
+                  ${st.perDay > 0 ? ` • ~ <strong style="color:#f5f5f5;">${U.fmtGBP(st.perDay)}</strong> / day` : ""}
+                </p>
+              `
+              : `<p style="margin:0;">No data for this period.</p>`
+          }
+        </div>
+      </details>
+      <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
+        Tip: Compare tab is still <strong>all-time</strong> for reliability.
+      </p>
+    `;
   }
 
   // ---------- rendering ----------
 
-  function buildQuickCompare(cmp) {
-    const miles = Number(cmp.miles || 0) || 0;
-    if (miles <= 0) return { hasData: false };
-
-    const evEnergyPerMile = Number(cmp.evPerMile ?? (cmp.evCost / miles)) || 0;
-    const iceEnergyPerMile = Number(cmp.icePerMile ?? (cmp.iceCost / miles)) || 0;
-
-    const per1000EvEnergy = evEnergyPerMile * 1000;
-    const per1000IceEnergy = iceEnergyPerMile * 1000;
-
-    const evAllInTotal = (Number(cmp.evCost) || 0) + (Number(cmp.maintEv) || 0);
-    const iceAllInTotal = (Number(cmp.iceCost) || 0) + (Number(cmp.maintIce) || 0);
-
-    const evAllInPerMile = evAllInTotal / miles;
-    const iceAllInPerMile = iceAllInTotal / miles;
-
-    const per1000EvAllIn = evAllInPerMile * 1000;
-    const per1000IceAllIn = iceAllInPerMile * 1000;
-
-    const diffAll = iceAllInTotal - evAllInTotal;
-
-    let diffText = "about the same overall";
-    if (diffAll > 1) diffText = "ICE more expensive overall";
-    else if (diffAll < -1) diffText = "EV more expensive overall";
-
-    const perEnergyDiff = per1000IceEnergy - per1000EvEnergy;
-    let perEnergyText = "about the same (energy)";
-    if (perEnergyDiff > 1) perEnergyText = "ICE more expensive (energy)";
-    else if (perEnergyDiff < -1) perEnergyText = "EV more expensive (energy)";
-
-    const perAllInDiff = per1000IceAllIn - per1000EvAllIn;
-    let perAllInText = "about the same (all-in)";
-    if (perAllInDiff > 1) perAllInText = "ICE more expensive (all-in)";
-    else if (perAllInDiff < -1) perAllInText = "EV more expensive (all-in)";
-
-    return {
-      hasData: true,
-      diffAll,
-      diffText,
-      per1000EvEnergy,
-      per1000IceEnergy,
-      perEnergyText,
-      per1000EvAllIn,
-      per1000IceAllIn,
-      perAllInText
-    };
-  }
-
   function renderAll() {
+    // Log table stays all-time (safe + expected)
     U.renderLogTable("logTable", state.entries);
 
-    let costsToRender = state.costs;
+    // Costs table = period-filtered + applies filter
     const filter = getCostFilterValue();
+
+    let costsBase = state.costs || [];
+    costsBase = filterByPeriod(costsBase, (c) => c.date);
+
+    let costsToRender = costsBase;
     if (filter !== "all") {
-      costsToRender = (state.costs || []).filter((c) => {
+      costsToRender = costsBase.filter((c) => {
         const a = (c.applies || "other").toLowerCase();
         return a === filter;
       });
@@ -394,8 +732,16 @@
 
     U.renderCostTable("costTable", costsToRender);
 
+    // Summary: keep original blocks (this/last/avg) from ALL entries
     const summary = C.buildSummary(state.entries);
+    U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary);
 
+    // Summary: add Selected period block based on period-filtered entries
+    ensurePeriodSummaryBlock();
+    const entriesForPeriod = filterByPeriod(state.entries || [], (e) => e.date);
+    renderPeriodSummary(entriesForPeriod);
+
+    // Compare stays all-time (entries all-time)
     const cmp = C.buildCompare(state.entries, state.settings);
 
     const mt = computeMaintenanceTotals();
@@ -411,14 +757,14 @@
     cmp.insuranceOther = ins.other;
     cmp.insuranceTotal = ins.total;
 
-    const quickCompare = buildQuickCompare(cmp);
-
-    U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary, quickCompare);
-
     U.renderCompare("compareStats", cmp);
 
+    // maintenance totals from Costs (all time) – always for all costs
     renderMaintenanceTotalInCosts();
     renderMaintenanceTotalInCompare();
+
+    // update badge
+    renderPeriodBadge();
   }
 
   // ---------- add / update entry ----------
@@ -430,11 +776,17 @@
     let price = parseFloat($("price").value);
     const note = $("note").value.trim();
 
-    if (isNaN(kwh) || kwh <= 0) return U.toast("Please enter kWh", "bad");
+    if (isNaN(kwh) || kwh <= 0) {
+      U.toast("Please enter kWh", "bad");
+      return;
+    }
 
-    if (isNaN(price) || price <= 0) price = autoPriceForType(type);
+    if (isNaN(price) || price <= 0) {
+      price = autoPriceForType(type);
+    }
 
     if (!currentEditId) {
+      // normal add
       const entry = {
         id:
           window.crypto && window.crypto.randomUUID
@@ -452,6 +804,7 @@
       renderAll();
       U.toast("Entry added", "good");
     } else {
+      // update existing
       const idx = state.entries.findIndex((e) => e.id === currentEditId);
       if (idx === -1) {
         U.toast("Entry to update not found", "bad");
@@ -474,7 +827,10 @@
   }
 
   function onSameAsLast() {
-    if (!state.entries.length) return U.toast("No previous entry", "info");
+    if (!state.entries.length) {
+      U.toast("No previous entry", "info");
+      return;
+    }
     const last = state.entries[state.entries.length - 1];
     $("date").value = last.date;
     $("kwh").value = last.kwh;
@@ -493,7 +849,10 @@
     const note = $("c_note").value.trim();
     const applies = getAppliesFromForm();
 
-    if (isNaN(amount) || amount <= 0) return U.toast("Please enter amount", "bad");
+    if (isNaN(amount) || amount <= 0) {
+      U.toast("Please enter amount", "bad");
+      return;
+    }
 
     if (!currentEditCostId) {
       const cost = {
@@ -537,49 +896,79 @@
   // ---------- delete entry / cost ----------
 
   function handleDeleteEntry(id) {
-    if (!id) return U.toast("Missing entry id", "bad");
+    if (!id) {
+      U.toast("Missing entry id", "bad");
+      return;
+    }
     const idx = state.entries.findIndex((e) => e.id === id);
-    if (idx === -1) return U.toast("Entry not found", "bad");
-    if (!window.confirm("Delete this entry?")) return;
+    if (idx === -1) {
+      U.toast("Entry not found", "bad");
+      return;
+    }
+    const ok = window.confirm("Delete this entry?");
+    if (!ok) return;
 
     state.entries.splice(idx, 1);
-    if (currentEditId === id) resetEditMode();
+    if (currentEditId === id) {
+      resetEditMode();
+    }
     D.saveState(state);
     renderAll();
     U.toast("Entry deleted", "good");
   }
 
   function handleDeleteCost(id) {
-    if (!id) return U.toast("Missing cost id", "bad");
+    if (!id) {
+      U.toast("Missing cost id", "bad");
+      return;
+    }
     const idx = state.costs.findIndex((c) => c.id === id);
-    if (idx === -1) return U.toast("Cost not found", "bad");
-    if (!window.confirm("Delete this cost?")) return;
+    if (idx === -1) {
+      U.toast("Cost not found", "bad");
+      return;
+    }
+    const ok = window.confirm("Delete this cost?");
+    if (!ok) return;
 
     state.costs.splice(idx, 1);
-    if (currentEditCostId === id) resetCostEditMode();
+    if (currentEditCostId === id) {
+      resetCostEditMode();
+    }
     D.saveState(state);
     renderAll();
     U.toast("Cost deleted", "good");
   }
 
   function onLogTableClick(ev) {
-    const btn = ev.target && ev.target.closest && ev.target.closest("button[data-action]");
+    const target = ev.target;
+    if (!target) return;
+    const btn = target.closest("button[data-action]");
     if (!btn) return;
+
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
 
-    if (action === "delete-entry") handleDeleteEntry(id);
-    else if (action === "edit-entry") startEditEntry(id);
+    if (action === "delete-entry") {
+      handleDeleteEntry(id);
+    } else if (action === "edit-entry") {
+      startEditEntry(id);
+    }
   }
 
   function onCostTableClick(ev) {
-    const btn = ev.target && ev.target.closest && ev.target.closest("button[data-action]");
+    const target = ev.target;
+    if (!target) return;
+    const btn = target.closest("button[data-action]");
     if (!btn) return;
+
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
 
-    if (action === "delete-cost") handleDeleteCost(id);
-    else if (action === "edit-cost") startEditCost(id);
+    if (action === "delete-cost") {
+      handleDeleteCost(id);
+    } else if (action === "edit-cost") {
+      startEditCost(id);
+    }
   }
 
   // ---------- CSV export helpers ----------
@@ -612,9 +1001,19 @@
   }
 
   function exportEntriesCSV() {
-    if (!state.entries.length) return U.toast("No entries to export", "info");
+    if (!state.entries.length) {
+      U.toast("No entries to export", "info");
+      return;
+    }
 
-    const header = ["Date", "kWh", "Type", "Price_per_kWh", "Cost", "Note"];
+    const header = [
+      "Date",
+      "kWh",
+      "Type",
+      "Price_per_kWh",
+      "Cost",
+      "Note"
+    ];
 
     const rows = state.entries
       .slice()
@@ -632,12 +1031,16 @@
       });
 
     const csv = [header.join(","), ...rows].join("\n");
-    const filename = `ev_log_entries_${todayISO()}.csv`;
+    const today = todayISO();
+    const filename = `ev_log_entries_${today}.csv`;
     downloadCSV(filename, csv);
   }
 
   function exportCostsCSV() {
-    if (!state.costs.length) return U.toast("No costs to export", "info");
+    if (!state.costs.length) {
+      U.toast("No costs to export", "info");
+      return;
+    }
 
     const header = ["Date", "Category", "Amount", "Note", "AppliesTo"];
 
@@ -655,7 +1058,8 @@
       });
 
     const csv = [header.join(","), ...rows].join("\n");
-    const filename = `ev_log_costs_${todayISO()}.csv`;
+    const today = todayISO();
+    const filename = `ev_log_costs_${today}.csv`;
     downloadCSV(filename, csv);
   }
 
@@ -668,7 +1072,9 @@
       btn.type = "button";
       btn.style.marginTop = "6px";
       btn.addEventListener("click", exportEntriesCSV);
-      if (logTable.parentNode) logTable.parentNode.insertBefore(btn, logTable.nextSibling);
+      if (logTable.parentNode) {
+        logTable.parentNode.insertBefore(btn, logTable.nextSibling);
+      }
     }
 
     const costTable = $("costTable");
@@ -679,7 +1085,9 @@
       btn2.type = "button";
       btn2.style.marginTop = "6px";
       btn2.addEventListener("click", exportCostsCSV);
-      if (costTable.parentNode) costTable.parentNode.insertBefore(btn2, costTable.nextSibling);
+      if (costTable.parentNode) {
+        costTable.parentNode.insertBefore(btn2, costTable.nextSibling);
+      }
     }
   }
 
@@ -693,7 +1101,9 @@
         U.toast("Backup copied to clipboard", "good");
       } else {
         const ok = window.prompt("Backup JSON (copy this):", backup);
-        if (ok !== null) U.toast("Backup shown (copy manually)", "info");
+        if (ok !== null) {
+          U.toast("Backup shown (copy manually)", "info");
+        }
       }
     } catch (e) {
       console.error(e);
@@ -702,13 +1112,21 @@
   }
 
   function importBackup() {
-    const raw = window.prompt("Paste backup JSON here. Current data will be replaced.");
-    if (!raw) return;
-
+    const raw = window.prompt(
+      "Paste backup JSON here. Current data will be replaced."
+    );
+    if (!raw) {
+      return;
+    }
     try {
       const parsed = JSON.parse(raw);
 
-      if (typeof parsed !== "object" || !parsed || !Array.isArray(parsed.entries) || !parsed.settings) {
+      if (
+        typeof parsed !== "object" ||
+        !parsed ||
+        !Array.isArray(parsed.entries) ||
+        !parsed.settings
+      ) {
         U.toast("Invalid backup format", "bad");
         return;
       }
@@ -716,6 +1134,12 @@
       state.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
       state.costs = Array.isArray(parsed.costs) ? parsed.costs : [];
       state.settings = Object.assign({}, state.settings, parsed.settings);
+
+      // preserve UI sub-state if missing
+      if (!state.ui) state.ui = {};
+      if (!state.ui.periodMode) state.ui.periodMode = "this-month";
+      if (!state.ui.periodFrom) state.ui.periodFrom = "";
+      if (!state.ui.periodTo) state.ui.periodTo = "";
 
       ensureCostAppliesDefaults();
 
@@ -737,11 +1161,15 @@
     $("date").value = todayISO();
     $("c_date").value = todayISO();
 
+    // по подразбиране OTHER за нови разходи
     const appliesSelect = $("c_applies");
-    if (appliesSelect && !appliesSelect.value) appliesSelect.value = "other";
+    if (appliesSelect && !appliesSelect.value) {
+      appliesSelect.value = "other";
+    }
 
     $("addEntry").addEventListener("click", onAddEntry);
     $("sameAsLast").addEventListener("click", onSameAsLast);
+
     $("c_add").addEventListener("click", onAddCost);
 
     $("savePrices").addEventListener("click", saveSettingsFromInputs);
@@ -749,18 +1177,28 @@
     $("importBackup").addEventListener("click", importBackup);
 
     const logContainer = $("logTable");
-    if (logContainer) logContainer.addEventListener("click", onLogTableClick);
+    if (logContainer) {
+      logContainer.addEventListener("click", onLogTableClick);
+    }
 
     const costContainer = $("costTable");
-    if (costContainer) costContainer.addEventListener("click", onCostTableClick);
+    if (costContainer) {
+      costContainer.addEventListener("click", onCostTableClick);
+    }
 
     syncSettingsToInputs();
     wireTabs();
+
+    ensurePeriodControls();       // NEW
     ensureCostFilterControls();
+
     renderAll();
     ensureExportButtons();
     resetEditMode();
     resetCostEditMode();
+
+    // set initial badge after controls exist
+    renderPeriodBadge();
   }
 
   wire();
