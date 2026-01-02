@@ -18,7 +18,7 @@
     for (const c of state.costs) {
       if (!c) continue;
       if (!c.applies) {
-        // старите записи по подразбиране – other (можеш да смениш на "ev" ако искаш)
+        // старите записи по подразбиране – other
         c.applies = "other";
       } else {
         c.applies = String(c.applies).toLowerCase();
@@ -214,20 +214,8 @@
     const ice = iceOnly + both;
     const total = evOnly + iceOnly + both + other;
 
-    return {
-      ev,
-      ice,
-      both,
-      other,
-      total
-    };
+    return { ev, ice, both, other, total };
   }
-
-  function computeMaintenanceTotalAllTime() {
-    return computeMaintenanceTotals().total;
-  }
-
-  // ---------- insurance totals (all-time, split EV/ICE) ----------
 
   function computeInsuranceTotals() {
     const costs = state.costs || [];
@@ -260,13 +248,7 @@
     const ice = iceOnly + both;
     const total = evOnly + iceOnly + both + other;
 
-    return {
-      ev,
-      ice,
-      both,
-      other,
-      total
-    };
+    return { ev, ice, both, other, total };
   }
 
   function renderMaintenanceTotalInCosts() {
@@ -332,7 +314,6 @@
   // ---------- costs filter controls (UI) ----------
 
   function ensureCostFilterControls() {
-    // ако вече има select – не правим нищо
     if ($("c_filter_applies")) return;
 
     const container = $("costTable");
@@ -391,7 +372,7 @@
   function renderAll() {
     U.renderLogTable("logTable", state.entries);
 
-    // филтрирани разходи за таблицата (Totals / Compare вървят по всички costs)
+    // filtered costs for table only
     let costsToRender = state.costs;
     const filter = getCostFilterValue();
     if (filter !== "all") {
@@ -404,12 +385,8 @@
     U.renderCostTable("costTable", costsToRender);
 
     const summary = C.buildSummary(state.entries);
-    U.renderSummary(
-      ["summary_this", "summary_last", "summary_avg"],
-      summary
-    );
 
-    // EV vs ICE compare (енергия) + добавяме поддръжка и insurance в data
+    // compare (energy) + add maintenance + insurance
     const cmp = C.buildCompare(state.entries, state.settings);
 
     const mt = computeMaintenanceTotals();
@@ -425,9 +402,42 @@
     cmp.insuranceOther = ins.other;
     cmp.insuranceTotal = ins.total;
 
+    // ---- NEW: build quickCompare for Summary ----
+    const miles = Number(cmp.miles || 0) || 0;
+    const evPerMile = miles > 0 ? (cmp.evPerMile ?? (cmp.evCost / miles)) : 0;
+    const icePerMile = miles > 0 ? (cmp.icePerMile ?? (cmp.iceCost / miles)) : 0;
+
+    const per1000Ev = evPerMile * 1000;
+    const per1000Ice = icePerMile * 1000;
+    const per1000Diff = per1000Ice - per1000Ev;
+
+    const evAll = (cmp.evCost || 0) + (mt.ev || 0);
+    const iceAll = (cmp.iceCost || 0) + (mt.ice || 0);
+    const diffAll = iceAll - evAll;
+
+    let diffText = "about the same overall";
+    if (diffAll > 1) diffText = "ICE more expensive overall";
+    else if (diffAll < -1) diffText = "EV more expensive overall";
+
+    let perText = "about the same per 1000 miles";
+    if (per1000Diff > 1) perText = "ICE more expensive per 1000 miles";
+    else if (per1000Diff < -1) perText = "EV more expensive per 1000 miles";
+
+    const quickCompare = {
+      hasData: miles > 0 && !isNaN(cmp.evCost),
+      diffAll,
+      diffText,
+      per1000Ev,
+      per1000Ice,
+      perText
+    };
+
+    // Summary now also receives quickCompare (ui-summary.js will show it)
+    U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary, quickCompare);
+
+    // render compare tab
     U.renderCompare("compareStats", cmp);
 
-    // maintenance totals от Costs (all time) – винаги за всички costs
     renderMaintenanceTotalInCosts();
     renderMaintenanceTotalInCompare();
   }
@@ -451,7 +461,6 @@
     }
 
     if (!currentEditId) {
-      // normal add
       const entry = {
         id:
           window.crypto && window.crypto.randomUUID
@@ -469,7 +478,6 @@
       renderAll();
       U.toast("Entry added", "good");
     } else {
-      // update existing
       const idx = state.entries.findIndex((e) => e.id === currentEditId);
       if (idx === -1) {
         U.toast("Entry to update not found", "bad");
@@ -671,14 +679,7 @@
       return;
     }
 
-    const header = [
-      "Date",
-      "kWh",
-      "Type",
-      "Price_per_kWh",
-      "Cost",
-      "Note"
-    ];
+    const header = ["Date", "kWh", "Type", "Price_per_kWh", "Cost", "Note"];
 
     const rows = state.entries
       .slice()
@@ -696,8 +697,7 @@
       });
 
     const csv = [header.join(","), ...rows].join("\n");
-    const today = todayISO();
-    const filename = `ev_log_entries_${today}.csv`;
+    const filename = `ev_log_entries_${todayISO()}.csv`;
     downloadCSV(filename, csv);
   }
 
@@ -723,8 +723,7 @@
       });
 
     const csv = [header.join(","), ...rows].join("\n");
-    const today = todayISO();
-    const filename = `ev_log_costs_${today}.csv`;
+    const filename = `ev_log_costs_${todayISO()}.csv`;
     downloadCSV(filename, csv);
   }
 
@@ -765,10 +764,8 @@
         await navigator.clipboard.writeText(backup);
         U.toast("Backup copied to clipboard", "good");
       } else {
-        const ok = window.prompt("Backup JSON (copy this):", backup);
-        if (ok !== null) {
-          U.toast("Backup shown (copy manually)", "info");
-        }
+        window.prompt("Backup JSON (copy this):", backup);
+        U.toast("Backup shown (copy manually)", "info");
       }
     } catch (e) {
       console.error(e);
@@ -780,9 +777,8 @@
     const raw = window.prompt(
       "Paste backup JSON here. Current data will be replaced."
     );
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
+
     try {
       const parsed = JSON.parse(raw);
 
@@ -820,7 +816,6 @@
     $("date").value = todayISO();
     $("c_date").value = todayISO();
 
-    // по подразбиране OTHER за нови разходи
     const appliesSelect = $("c_applies");
     if (appliesSelect && !appliesSelect.value) {
       appliesSelect.value = "other";
@@ -853,27 +848,6 @@
     resetEditMode();
     resetCostEditMode();
   }
-
-  // ---------- expose core pieces for future splitting ----------
-
-  window.EVApp = {
-    state,
-    todayISO,
-    autoPriceForType,
-    computeMaintenanceTotals,
-    computeMaintenanceTotalAllTime,
-    computeInsuranceTotals,
-    renderAll,
-    onAddEntry,
-    onSameAsLast,
-    onAddCost,
-    handleDeleteEntry,
-    handleDeleteCost,
-    exportEntriesCSV,
-    exportCostsCSV,
-    exportBackup,
-    importBackup
-  };
 
   wire();
 })();
