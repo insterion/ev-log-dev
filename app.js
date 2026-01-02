@@ -18,7 +18,6 @@
     for (const c of state.costs) {
       if (!c) continue;
       if (!c.applies) {
-        // старите записи по подразбиране – other
         c.applies = "other";
       } else {
         c.applies = String(c.applies).toLowerCase();
@@ -98,29 +97,19 @@
   function resetEditMode() {
     currentEditId = null;
     const addBtn = $("addEntry");
-    if (addBtn) {
-      addBtn.textContent = "Add entry";
-    }
+    if (addBtn) addBtn.textContent = "Add entry";
   }
 
   function resetCostEditMode() {
     currentEditCostId = null;
     const btn = $("c_add");
-    if (btn) {
-      btn.textContent = "Add cost";
-    }
+    if (btn) btn.textContent = "Add cost";
   }
 
   function startEditEntry(id) {
-    if (!id) {
-      U.toast("Missing entry id", "bad");
-      return;
-    }
+    if (!id) return U.toast("Missing entry id", "bad");
     const entry = state.entries.find((e) => e.id === id);
-    if (!entry) {
-      U.toast("Entry not found", "bad");
-      return;
-    }
+    if (!entry) return U.toast("Entry not found", "bad");
 
     currentEditId = id;
 
@@ -131,23 +120,15 @@
     $("note").value = entry.note || "";
 
     const addBtn = $("addEntry");
-    if (addBtn) {
-      addBtn.textContent = "Update entry";
-    }
+    if (addBtn) addBtn.textContent = "Update entry";
 
     U.toast("Editing entry", "info");
   }
 
   function startEditCost(id) {
-    if (!id) {
-      U.toast("Missing cost id", "bad");
-      return;
-    }
+    if (!id) return U.toast("Missing cost id", "bad");
     const cost = state.costs.find((c) => c.id === id);
-    if (!cost) {
-      U.toast("Cost not found", "bad");
-      return;
-    }
+    if (!cost) return U.toast("Cost not found", "bad");
 
     currentEditCostId = id;
 
@@ -159,17 +140,11 @@
     const appliesSelect = $("c_applies");
     if (appliesSelect) {
       const v = (cost.applies || "other").toLowerCase();
-      if (v === "ev" || v === "ice" || v === "both" || v === "other") {
-        appliesSelect.value = v;
-      } else {
-        appliesSelect.value = "other";
-      }
+      appliesSelect.value = (v === "ev" || v === "ice" || v === "both" || v === "other") ? v : "other";
     }
 
     const btn = $("c_add");
-    if (btn) {
-      btn.textContent = "Update cost";
-    }
+    if (btn) btn.textContent = "Update cost";
 
     U.toast("Editing cost", "info");
   }
@@ -178,20 +153,14 @@
     const el = $("c_applies");
     if (!el) return "other";
     const v = (el.value || "").toLowerCase();
-    if (v === "ev" || v === "ice" || v === "both" || v === "other") {
-      return v;
-    }
-    return "other";
+    return (v === "ev" || v === "ice" || v === "both" || v === "other") ? v : "other";
   }
 
   // ---------- maintenance totals (all-time, split EV/ICE) ----------
 
   function computeMaintenanceTotals() {
     const costs = state.costs || [];
-    let evOnly = 0;
-    let iceOnly = 0;
-    let both = 0;
-    let other = 0;
+    let evOnly = 0, iceOnly = 0, both = 0, other = 0;
 
     for (const c of costs) {
       if (!c) continue;
@@ -199,15 +168,10 @@
       if (!amount) continue;
 
       const a = (c.applies || "other").toLowerCase();
-      if (a === "ev") {
-        evOnly += amount;
-      } else if (a === "ice") {
-        iceOnly += amount;
-      } else if (a === "both") {
-        both += amount;
-      } else {
-        other += amount;
-      }
+      if (a === "ev") evOnly += amount;
+      else if (a === "ice") iceOnly += amount;
+      else if (a === "both") both += amount;
+      else other += amount;
     }
 
     const ev = evOnly + both;
@@ -217,12 +181,11 @@
     return { ev, ice, both, other, total };
   }
 
+  // ---------- insurance totals (all-time, split EV/ICE) ----------
+
   function computeInsuranceTotals() {
     const costs = state.costs || [];
-    let evOnly = 0;
-    let iceOnly = 0;
-    let both = 0;
-    let other = 0;
+    let evOnly = 0, iceOnly = 0, both = 0, other = 0;
 
     for (const c of costs) {
       if (!c) continue;
@@ -233,15 +196,10 @@
       if (cat !== "insurance") continue;
 
       const a = (c.applies || "other").toLowerCase();
-      if (a === "ev") {
-        evOnly += amount;
-      } else if (a === "ice") {
-        iceOnly += amount;
-      } else if (a === "both") {
-        both += amount;
-      } else {
-        other += amount;
-      }
+      if (a === "ev") evOnly += amount;
+      else if (a === "ice") iceOnly += amount;
+      else if (a === "both") both += amount;
+      else other += amount;
     }
 
     const ev = evOnly + both;
@@ -263,9 +221,7 @@
         el.id = "maintenanceTotalCosts";
         el.className = "small";
         el.style.marginTop = "6px";
-        if (container.parentNode) {
-          container.parentNode.insertBefore(el, container.nextSibling);
-        }
+        if (container.parentNode) container.parentNode.insertBefore(el, container.nextSibling);
       }
 
       const diff = totals.ev - totals.ice;
@@ -347,9 +303,7 @@
       select.appendChild(opt);
     });
 
-    select.addEventListener("change", () => {
-      renderAll();
-    });
+    select.addEventListener("change", () => renderAll());
 
     wrapper.appendChild(label);
     wrapper.appendChild(select);
@@ -361,18 +315,62 @@
     const sel = $("c_filter_applies");
     if (!sel) return "all";
     const v = (sel.value || "all").toLowerCase();
-    if (v === "ev" || v === "ice" || v === "both" || v === "other" || v === "all") {
-      return v;
-    }
-    return "all";
+    return (v === "ev" || v === "ice" || v === "both" || v === "other" || v === "all") ? v : "all";
   }
 
   // ---------- rendering ----------
 
+  function buildQuickCompare(cmp) {
+    const miles = Number(cmp.miles || 0) || 0;
+    if (miles <= 0) return { hasData: false };
+
+    const evEnergyPerMile = Number(cmp.evPerMile ?? (cmp.evCost / miles)) || 0;
+    const iceEnergyPerMile = Number(cmp.icePerMile ?? (cmp.iceCost / miles)) || 0;
+
+    const per1000EvEnergy = evEnergyPerMile * 1000;
+    const per1000IceEnergy = iceEnergyPerMile * 1000;
+
+    const evAllInTotal = (Number(cmp.evCost) || 0) + (Number(cmp.maintEv) || 0);
+    const iceAllInTotal = (Number(cmp.iceCost) || 0) + (Number(cmp.maintIce) || 0);
+
+    const evAllInPerMile = evAllInTotal / miles;
+    const iceAllInPerMile = iceAllInTotal / miles;
+
+    const per1000EvAllIn = evAllInPerMile * 1000;
+    const per1000IceAllIn = iceAllInPerMile * 1000;
+
+    const diffAll = iceAllInTotal - evAllInTotal;
+
+    let diffText = "about the same overall";
+    if (diffAll > 1) diffText = "ICE more expensive overall";
+    else if (diffAll < -1) diffText = "EV more expensive overall";
+
+    const perEnergyDiff = per1000IceEnergy - per1000EvEnergy;
+    let perEnergyText = "about the same (energy)";
+    if (perEnergyDiff > 1) perEnergyText = "ICE more expensive (energy)";
+    else if (perEnergyDiff < -1) perEnergyText = "EV more expensive (energy)";
+
+    const perAllInDiff = per1000IceAllIn - per1000EvAllIn;
+    let perAllInText = "about the same (all-in)";
+    if (perAllInDiff > 1) perAllInText = "ICE more expensive (all-in)";
+    else if (perAllInDiff < -1) perAllInText = "EV more expensive (all-in)";
+
+    return {
+      hasData: true,
+      diffAll,
+      diffText,
+      per1000EvEnergy,
+      per1000IceEnergy,
+      perEnergyText,
+      per1000EvAllIn,
+      per1000IceAllIn,
+      perAllInText
+    };
+  }
+
   function renderAll() {
     U.renderLogTable("logTable", state.entries);
 
-    // filtered costs for table only
     let costsToRender = state.costs;
     const filter = getCostFilterValue();
     if (filter !== "all") {
@@ -386,7 +384,7 @@
 
     const summary = C.buildSummary(state.entries);
 
-    // compare (energy) + add maintenance + insurance
+    // Compare data
     const cmp = C.buildCompare(state.entries, state.settings);
 
     const mt = computeMaintenanceTotals();
@@ -402,40 +400,11 @@
     cmp.insuranceOther = ins.other;
     cmp.insuranceTotal = ins.total;
 
-    // ---- NEW: build quickCompare for Summary ----
-    const miles = Number(cmp.miles || 0) || 0;
-    const evPerMile = miles > 0 ? (cmp.evPerMile ?? (cmp.evCost / miles)) : 0;
-    const icePerMile = miles > 0 ? (cmp.icePerMile ?? (cmp.iceCost / miles)) : 0;
+    // NEW: QuickCompare for Summary (clear energy vs all-in)
+    const quickCompare = buildQuickCompare(cmp);
 
-    const per1000Ev = evPerMile * 1000;
-    const per1000Ice = icePerMile * 1000;
-    const per1000Diff = per1000Ice - per1000Ev;
-
-    const evAll = (cmp.evCost || 0) + (mt.ev || 0);
-    const iceAll = (cmp.iceCost || 0) + (mt.ice || 0);
-    const diffAll = iceAll - evAll;
-
-    let diffText = "about the same overall";
-    if (diffAll > 1) diffText = "ICE more expensive overall";
-    else if (diffAll < -1) diffText = "EV more expensive overall";
-
-    let perText = "about the same per 1000 miles";
-    if (per1000Diff > 1) perText = "ICE more expensive per 1000 miles";
-    else if (per1000Diff < -1) perText = "EV more expensive per 1000 miles";
-
-    const quickCompare = {
-      hasData: miles > 0 && !isNaN(cmp.evCost),
-      diffAll,
-      diffText,
-      per1000Ev,
-      per1000Ice,
-      perText
-    };
-
-    // Summary now also receives quickCompare (ui-summary.js will show it)
     U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary, quickCompare);
 
-    // render compare tab
     U.renderCompare("compareStats", cmp);
 
     renderMaintenanceTotalInCosts();
@@ -569,79 +538,51 @@
   // ---------- delete entry / cost ----------
 
   function handleDeleteEntry(id) {
-    if (!id) {
-      U.toast("Missing entry id", "bad");
-      return;
-    }
+    if (!id) return U.toast("Missing entry id", "bad");
     const idx = state.entries.findIndex((e) => e.id === id);
-    if (idx === -1) {
-      U.toast("Entry not found", "bad");
-      return;
-    }
+    if (idx === -1) return U.toast("Entry not found", "bad");
     const ok = window.confirm("Delete this entry?");
     if (!ok) return;
 
     state.entries.splice(idx, 1);
-    if (currentEditId === id) {
-      resetEditMode();
-    }
+    if (currentEditId === id) resetEditMode();
     D.saveState(state);
     renderAll();
     U.toast("Entry deleted", "good");
   }
 
   function handleDeleteCost(id) {
-    if (!id) {
-      U.toast("Missing cost id", "bad");
-      return;
-    }
+    if (!id) return U.toast("Missing cost id", "bad");
     const idx = state.costs.findIndex((c) => c.id === id);
-    if (idx === -1) {
-      U.toast("Cost not found", "bad");
-      return;
-    }
+    if (idx === -1) return U.toast("Cost not found", "bad");
     const ok = window.confirm("Delete this cost?");
     if (!ok) return;
 
     state.costs.splice(idx, 1);
-    if (currentEditCostId === id) {
-      resetCostEditMode();
-    }
+    if (currentEditCostId === id) resetCostEditMode();
     D.saveState(state);
     renderAll();
     U.toast("Cost deleted", "good");
   }
 
   function onLogTableClick(ev) {
-    const target = ev.target;
-    if (!target) return;
-    const btn = target.closest("button[data-action]");
+    const btn = ev.target && ev.target.closest && ev.target.closest("button[data-action]");
     if (!btn) return;
-
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
 
-    if (action === "delete-entry") {
-      handleDeleteEntry(id);
-    } else if (action === "edit-entry") {
-      startEditEntry(id);
-    }
+    if (action === "delete-entry") handleDeleteEntry(id);
+    else if (action === "edit-entry") startEditEntry(id);
   }
 
   function onCostTableClick(ev) {
-    const target = ev.target;
-    if (!target) return;
-    const btn = target.closest("button[data-action]");
+    const btn = ev.target && ev.target.closest && ev.target.closest("button[data-action]");
     if (!btn) return;
-
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
 
-    if (action === "delete-cost") {
-      handleDeleteCost(id);
-    } else if (action === "edit-cost") {
-      startEditCost(id);
-    }
+    if (action === "delete-cost") handleDeleteCost(id);
+    else if (action === "edit-cost") startEditCost(id);
   }
 
   // ---------- CSV export helpers ----------
@@ -674,10 +615,7 @@
   }
 
   function exportEntriesCSV() {
-    if (!state.entries.length) {
-      U.toast("No entries to export", "info");
-      return;
-    }
+    if (!state.entries.length) return U.toast("No entries to export", "info");
 
     const header = ["Date", "kWh", "Type", "Price_per_kWh", "Cost", "Note"];
 
@@ -702,10 +640,7 @@
   }
 
   function exportCostsCSV() {
-    if (!state.costs.length) {
-      U.toast("No costs to export", "info");
-      return;
-    }
+    if (!state.costs.length) return U.toast("No costs to export", "info");
 
     const header = ["Date", "Category", "Amount", "Note", "AppliesTo"];
 
@@ -736,9 +671,7 @@
       btn.type = "button";
       btn.style.marginTop = "6px";
       btn.addEventListener("click", exportEntriesCSV);
-      if (logTable.parentNode) {
-        logTable.parentNode.insertBefore(btn, logTable.nextSibling);
-      }
+      if (logTable.parentNode) logTable.parentNode.insertBefore(btn, logTable.nextSibling);
     }
 
     const costTable = $("costTable");
@@ -749,9 +682,7 @@
       btn2.type = "button";
       btn2.style.marginTop = "6px";
       btn2.addEventListener("click", exportCostsCSV);
-      if (costTable.parentNode) {
-        costTable.parentNode.insertBefore(btn2, costTable.nextSibling);
-      }
+      if (costTable.parentNode) costTable.parentNode.insertBefore(btn2, costTable.nextSibling);
     }
   }
 
@@ -764,8 +695,8 @@
         await navigator.clipboard.writeText(backup);
         U.toast("Backup copied to clipboard", "good");
       } else {
-        window.prompt("Backup JSON (copy this):", backup);
-        U.toast("Backup shown (copy manually)", "info");
+        const ok = window.prompt("Backup JSON (copy this):", backup);
+        if (ok !== null) U.toast("Backup shown (copy manually)", "info");
       }
     } catch (e) {
       console.error(e);
@@ -774,20 +705,13 @@
   }
 
   function importBackup() {
-    const raw = window.prompt(
-      "Paste backup JSON here. Current data will be replaced."
-    );
+    const raw = window.prompt("Paste backup JSON here. Current data will be replaced.");
     if (!raw) return;
 
     try {
       const parsed = JSON.parse(raw);
 
-      if (
-        typeof parsed !== "object" ||
-        !parsed ||
-        !Array.isArray(parsed.entries) ||
-        !parsed.settings
-      ) {
+      if (typeof parsed !== "object" || !parsed || !Array.isArray(parsed.entries) || !parsed.settings) {
         U.toast("Invalid backup format", "bad");
         return;
       }
@@ -817,13 +741,10 @@
     $("c_date").value = todayISO();
 
     const appliesSelect = $("c_applies");
-    if (appliesSelect && !appliesSelect.value) {
-      appliesSelect.value = "other";
-    }
+    if (appliesSelect && !appliesSelect.value) appliesSelect.value = "other";
 
     $("addEntry").addEventListener("click", onAddEntry);
     $("sameAsLast").addEventListener("click", onSameAsLast);
-
     $("c_add").addEventListener("click", onAddCost);
 
     $("savePrices").addEventListener("click", saveSettingsFromInputs);
@@ -831,14 +752,10 @@
     $("importBackup").addEventListener("click", importBackup);
 
     const logContainer = $("logTable");
-    if (logContainer) {
-      logContainer.addEventListener("click", onLogTableClick);
-    }
+    if (logContainer) logContainer.addEventListener("click", onLogTableClick);
 
     const costContainer = $("costTable");
-    if (costContainer) {
-      costContainer.addEventListener("click", onCostTableClick);
-    }
+    if (costContainer) costContainer.addEventListener("click", onCostTableClick);
 
     syncSettingsToInputs();
     wireTabs();
