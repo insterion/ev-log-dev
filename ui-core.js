@@ -1,19 +1,27 @@
-// ui-core.js – shared formatting + toast helpers
+// ui-core.js – core formatting + toast + openTab
 
 (function () {
+  const EVUI = (window.EVUI = window.EVUI || {});
+
   function fmtGBP(v) {
-    if (isNaN(v)) return "£0.00";
-    return "£" + Number(v).toFixed(2);
+    const n = Number(v);
+    if (!isFinite(n)) return "£0.00";
+    return "£" + n.toFixed(2);
   }
 
   function fmtNum(v, digits = 1) {
-    if (isNaN(v)) return "0";
-    return Number(v).toFixed(digits);
+    const n = Number(v);
+    if (!isFinite(n)) return "0";
+    return n.toFixed(digits);
   }
 
   function fmtDate(d) {
-    // expect "YYYY-MM-DD"
     return d || "";
+  }
+
+  function escapeHTML(s) {
+    if (s == null) return "";
+    return String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   function toast(msg, kind = "info") {
@@ -22,17 +30,36 @@
     el.textContent = msg;
     el.className = "";
     el.classList.add("show", kind);
-    setTimeout(() => {
-      el.classList.remove("show");
-    }, 1700);
+    setTimeout(() => el.classList.remove("show"), 1700);
   }
 
-  // правим общ обект EVUI, който другите UI файлове ще разширяват
-  window.EVUI = {
-    fmtGBP,
-    fmtNum,
-    fmtDate,
-    toast
-  };
-})();
+  // Universal tab opener – works even if your Summary tab is named "summ"
+  function openTab(tabName) {
+    const name = String(tabName || "").trim();
+    if (!name) return false;
 
+    // Prefer clicking the tab button if it exists
+    const btn = document.querySelector(`.tabbtn[data-tab="${CSS.escape(name)}"]`);
+    if (btn) {
+      btn.click();
+      return true;
+    }
+
+    // Fallback: force classes (if wiring is missing for some reason)
+    const tabs = document.querySelectorAll(".tab");
+    const btns = document.querySelectorAll(".tabbtn");
+
+    if (!tabs.length || !btns.length) return false;
+
+    tabs.forEach((t) => t.classList.toggle("active", t.id === name));
+    btns.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    return true;
+  }
+
+  EVUI.fmtGBP = fmtGBP;
+  EVUI.fmtNum = fmtNum;
+  EVUI.fmtDate = fmtDate;
+  EVUI.escapeHTML = escapeHTML;
+  EVUI.toast = toast;
+  EVUI.openTab = openTab;
+})();
