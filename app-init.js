@@ -1,4 +1,4 @@
-// app-init.js – wire tabs + wire everything once (with global tab activator)
+// app-init.js – wire tabs + global "open tab" that clicks the real tab button
 
 (function () {
   const A = window.EVApp;
@@ -14,11 +14,7 @@
 
     btns.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tab)));
 
-    // expose for other modules (Summary -> Open Compare, etc.)
-    A.Tabs = {
-      activate
-    };
-
+    A.Tabs = { activate };
     activate("log");
   }
 
@@ -43,25 +39,45 @@
     A.U.toast("Settings saved", "good");
   }
 
-  // Global click handler for "open tab" buttons/links (e.g. Summary -> Compare)
+  // ULTRA-ROBUST openTab: click the real tab button if it exists
+  function openTab(tabName) {
+    const btn = document.querySelector(`.tabbtn[data-tab="${tabName}"]`);
+    if (btn) {
+      btn.click(); // safest
+      return true;
+    }
+    // fallback
+    if (A.Tabs && typeof A.Tabs.activate === "function") {
+      A.Tabs.activate(tabName);
+      return true;
+    }
+    return false;
+  }
+
+  // Global handler for anything with data-open-tab
   function wireGlobalTabLinks() {
-    document.addEventListener("click", (ev) => {
+    const handler = (ev) => {
       const t = ev.target;
       if (!t) return;
 
       const el = t.closest("[data-open-tab]");
       if (!el) return;
 
+      ev.preventDefault();
+      ev.stopPropagation();
+
       const tab = (el.getAttribute("data-open-tab") || "").trim();
       if (!tab) return;
 
-      // prevent accidental form submits / link navigation
-      ev.preventDefault();
-
-      if (A.Tabs && typeof A.Tabs.activate === "function") {
-        A.Tabs.activate(tab);
+      const ok = openTab(tab);
+      if (!ok) {
+        A.U.toast(`Tab "${tab}" not found`, "bad");
       }
-    });
+    };
+
+    // pointerup works better on mobile than click in some cases
+    document.addEventListener("pointerup", handler, { capture: true });
+    document.addEventListener("click", handler, { capture: true });
   }
 
   function wire() {
@@ -70,11 +86,9 @@
     A.$("date").value = A.todayISO();
     A.$("c_date").value = A.todayISO();
 
-    // default OTHER for new costs
     const appliesSelect = A.$("c_applies");
     if (appliesSelect && !appliesSelect.value) appliesSelect.value = "other";
 
-    // buttons
     A.$("addEntry").addEventListener("click", A.Actions.onAddEntry);
     A.$("sameAsLast").addEventListener("click", A.Actions.onSameAsLast);
     A.$("c_add").addEventListener("click", A.Actions.onAddCost);
@@ -83,18 +97,15 @@
     A.$("exportBackup").addEventListener("click", A.Export.exportBackup);
     A.$("importBackup").addEventListener("click", A.Export.importBackup);
 
-    // table click delegation
     const logContainer = A.$("logTable");
     if (logContainer) logContainer.addEventListener("click", A.Actions.onLogTableClick);
 
     const costContainer = A.$("costTable");
     if (costContainer) costContainer.addEventListener("click", A.Actions.onCostTableClick);
 
-    // tabs + global tab links
     wireTabs();
     wireGlobalTabLinks();
 
-    // initial UI
     syncSettingsToInputs();
 
     A.Render.ensurePeriodControls();
