@@ -1,23 +1,26 @@
-// ui-summary.js – Summary UI (compact + collapsible) + EV vs ICE quick view + "Open Compare"
+// ui-summary.js – compact + collapsible summary + "Open Compare" quick jump
 
 (function () {
-  const U = window.EVUI || {};
-  if (!U) return;
+  const U = window.EVUI;
 
-  function goToCompare() {
-    try {
-      window.dispatchEvent(
-        new CustomEvent("ev:goTab", { detail: { tab: "compare" } })
-      );
-    } catch (e) {
-      // fallback (older browsers)
-      const ev = document.createEvent("CustomEvent");
-      ev.initCustomEvent("ev:goTab", true, true, { tab: "compare" });
-      window.dispatchEvent(ev);
-    }
+  // One-time click handler (delegated) for "Open Compare"
+  let wired = false;
+  function wireOpenCompareOnce() {
+    if (wired) return;
+    wired = true;
+
+    document.addEventListener("click", (ev) => {
+      const btn = ev.target && ev.target.closest && ev.target.closest("[data-action='open-compare']");
+      if (!btn) return;
+
+      const ok = U.openTab("compare");
+      if (!ok) U.toast("Compare tab not found", "bad");
+    });
   }
 
-  function renderSummary(containerIds, summary, quickCompare) {
+  function renderSummary(containerIds, summary) {
+    wireOpenCompareOnce();
+
     const [idThis, idLast, idAvg] = containerIds.map((id) =>
       document.getElementById(id)
     );
@@ -26,17 +29,15 @@
     function compactLines(data) {
       if (!data) return "<p>No data.</p>";
 
-      const kwh = U.fmtNum ? U.fmtNum(data.kwh, 1) : (data.kwh || 0).toFixed(1);
-      const cost = U.fmtGBP ? U.fmtGBP(data.cost) : "£" + (data.cost || 0).toFixed(2);
+      const kwh = U.fmtNum(data.kwh, 1);
+      const cost = U.fmtGBP(data.cost);
       const count = data.count != null ? data.count : null;
 
       const avgPrice =
-        data.avgPrice && data.avgPrice > 0 ? `£${data.avgPrice.toFixed(3)}/kWh` : null;
+        data.avgPrice && data.avgPrice > 0 ? `£${Number(data.avgPrice).toFixed(3)}/kWh` : null;
 
       const perDay =
-        data.perDay && data.perDay > 0
-          ? (U.fmtGBP ? U.fmtGBP(data.perDay) : "£" + data.perDay.toFixed(2)) + "/day"
-          : null;
+        data.perDay && data.perDay > 0 ? U.fmtGBP(data.perDay) + "/day" : null;
 
       return `
         <p style="margin:0 0 4px;">
@@ -50,155 +51,51 @@
       `;
     }
 
-    // ---- This month ----
     idThis.innerHTML = `
       <details open>
         <summary style="cursor:pointer;"><strong>This month</strong></summary>
-        <div style="margin-top:6px;">
-          ${compactLines(summary.thisMonth)}
-        </div>
+        <div style="margin-top:6px;">${compactLines(summary && summary.thisMonth)}</div>
       </details>
     `;
 
-    // ---- Last month ----
     idLast.innerHTML = `
       <details>
         <summary style="cursor:pointer;"><strong>Last month</strong></summary>
-        <div style="margin-top:6px;">
-          ${compactLines(summary.lastMonth)}
-        </div>
+        <div style="margin-top:6px;">${compactLines(summary && summary.lastMonth)}</div>
       </details>
     `;
 
-    // ---- Average ----
     idAvg.innerHTML = `
       <details>
         <summary style="cursor:pointer;"><strong>Average (all months)</strong></summary>
         <div style="margin-top:6px;">
           ${
-            summary.avg
+            summary && summary.avg
               ? `
                 <p style="margin:0 0 4px;">
                   <strong>${U.fmtNum(summary.avg.kwh, 1)} kWh</strong> •
                   <strong>${U.fmtGBP(summary.avg.cost)}</strong>
                 </p>
                 <p style="margin:0;font-size:0.85rem;color:#b0b0b0;">
-                  Avg price: <strong style="color:#f5f5f5;">£${summary.avg.avgPrice.toFixed(
-                    3
-                  )}</strong> / kWh
+                  Avg price: <strong style="color:#f5f5f5;">£${Number(summary.avg.avgPrice).toFixed(3)}</strong> / kWh
                 </p>
               `
               : "<p>No data.</p>"
           }
         </div>
       </details>
-    `;
 
-    // ---- EV vs ICE quick view (insert after Average) ----
-    try {
-      const parent = idAvg.parentNode;
-      if (!parent) return;
-
-      let box = document.getElementById("summaryQuickCompare");
-      if (!box) {
-        box = document.createElement("div");
-        box.id = "summaryQuickCompare";
-        box.style.borderRadius = "18px";
-        box.style.border = "1px solid #222";
-        box.style.background = "#080808";
-        box.style.padding = "10px 12px";
-        box.style.marginBottom = "10px";
-        box.style.fontSize = "0.9rem";
-        box.style.cursor = "pointer";
-        box.setAttribute("role", "button");
-        box.setAttribute("tabindex", "0");
-
-        // tap anywhere in the box -> Compare
-        box.addEventListener("click", (e) => {
-          // ignore clicks on button inside (handled below)
-          const btn = e.target && e.target.closest && e.target.closest("button[data-action='go-compare']");
-          if (btn) return;
-          goToCompare();
-        });
-
-        // keyboard enter/space
-        box.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            goToCompare();
-          }
-        });
-
-        if (idAvg.nextSibling) parent.insertBefore(box, idAvg.nextSibling);
-        else parent.appendChild(box);
-      }
-
-      if (!quickCompare || !quickCompare.hasData) {
-        box.innerHTML = `
-          <p style="margin:0;"><strong>EV vs ICE (quick view)</strong></p>
-          <p style="margin:6px 0 10px;font-size:0.85rem;color:#b0b0b0;">
-            Not enough data yet.
-          </p>
-          <button type="button" data-action="go-compare" style="margin-top:0;" class="primary">
-            Open Compare
-          </button>
-        `;
-
-        const btn = box.querySelector("button[data-action='go-compare']");
-        if (btn) {
-          btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            goToCompare();
-          });
-        }
-        return;
-      }
-
-      const diffAbs = Math.abs(quickCompare.diffAll || 0);
-
-      box.innerHTML = `
-        <p style="margin:0 0 6px;"><strong>EV vs ICE (quick view)</strong></p>
-
-        <p style="margin:0 0 6px;">
-          All-in (ICE – EV): <strong>${U.fmtGBP(diffAbs)}</strong>
-          <span style="color:#b0b0b0;">(${quickCompare.diffText})</span>
+      <div style="margin-top:10px;padding:10px 12px;border-radius:18px;border:1px solid #222;background:#080808;">
+        <p style="margin:0 0 6px;font-weight:600;">EV vs ICE (quick view)</p>
+        <p style="margin:0 0 10px;font-size:0.9rem;color:#b0b0b0;">
+          Tip: open <strong style="color:#f5f5f5;">Compare</strong> tab for full breakdown.
         </p>
-
-        <p style="margin:0 0 6px;">
-          Energy per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000EvEnergy)}</strong>,
-          ICE <strong>${U.fmtGBP(quickCompare.per1000IceEnergy)}</strong>
-          <span style="color:#b0b0b0;">(${quickCompare.perEnergyText})</span>
-        </p>
-
-        <p style="margin:0 0 10px;">
-          All-in per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000EvAllIn)}</strong>,
-          ICE <strong>${U.fmtGBP(quickCompare.per1000IceAllIn)}</strong>
-          <span style="color:#b0b0b0;">(${quickCompare.perAllInText})</span>
-        </p>
-
-        <button type="button" data-action="go-compare" class="primary">
+        <button type="button" class="btn-mini" data-action="open-compare" style="padding:8px 12px;border-radius:22px;">
           Open Compare
         </button>
-
-        <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
-          All-in includes maintenance.
-        </p>
-      `;
-
-      const btn = box.querySelector("button[data-action='go-compare']");
-      if (btn) {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          goToCompare();
-        });
-      }
-    } catch (e) {
-      console && console.warn && console.warn("summaryQuickCompare failed", e);
-    }
+      </div>
+    `;
   }
 
-  window.EVUI = window.EVUI || {};
   window.EVUI.renderSummary = renderSummary;
 })();
