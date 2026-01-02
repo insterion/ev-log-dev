@@ -112,22 +112,25 @@
       }
 
       const diffAbs = Math.abs(quickCompare.diffAll || 0);
-      const diffText = quickCompare.diffText || "about the same overall";
-      const perText = quickCompare.perText || "about the same per 1000 miles";
 
-      // clearer labels so no “contradiction”
       box.innerHTML = `
         <p style="margin:0 0 6px;"><strong>EV vs ICE (quick view)</strong></p>
 
         <p style="margin:0 0 6px;">
           All-in (ICE – EV): <strong>${U.fmtGBP(diffAbs)}</strong>
-          <span style="color:#b0b0b0;">(${diffText})</span>
+          <span style="color:#b0b0b0;">(${quickCompare.diffText})</span>
+        </p>
+
+        <p style="margin:0 0 6px;">
+          Energy per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000EvEnergy)}</strong>,
+          ICE <strong>${U.fmtGBP(quickCompare.per1000IceEnergy)}</strong>
+          <span style="color:#b0b0b0;">(${quickCompare.perEnergyText})</span>
         </p>
 
         <p style="margin:0;">
-          Energy per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000Ev || 0)}</strong>,
-          ICE <strong>${U.fmtGBP(quickCompare.per1000Ice || 0)}</strong>
-          <span style="color:#b0b0b0;">(${perText})</span>
+          All-in per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000EvAllIn)}</strong>,
+          ICE <strong>${U.fmtGBP(quickCompare.per1000IceAllIn)}</strong>
+          <span style="color:#b0b0b0;">(${quickCompare.perAllInText})</span>
         </p>
 
         <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
