@@ -194,7 +194,6 @@
 
     box = document.createElement("div");
     box.id = "summary_period";
-    // match your existing style blocks
     box.style.borderRadius = "18px";
     box.style.border = "1px solid #222";
     box.style.background = "#080808";
@@ -234,6 +233,15 @@
     const p = A.getActivePeriod();
     const st = computeStatsForEntries(entriesForPeriod);
 
+    // Button: open Compare tab (works via app-init.js global listener)
+    const openCompareBtn = `
+      <button
+        type="button"
+        data-open-tab="compare"
+        style="margin-top:8px;"
+      >Open Compare</button>
+    `;
+
     box.innerHTML = `
       <details open>
         <summary style="cursor:pointer;"><strong>Selected period (from Costs)</strong></summary>
@@ -254,6 +262,7 @@
               `
               : `<p style="margin:0;">No data for this period.</p>`
           }
+          ${openCompareBtn}
         </div>
       </details>
       <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
@@ -264,13 +273,12 @@
 
   // ---------- renderAll ----------
   function renderAll() {
-    // Log table all-time
     U.renderLogTable("logTable", A.state.entries);
 
     // Costs table = period + applies filter
     const filter = A.getCostFilterValue();
 
-    let costsBase = A.filterByPeriod(A.state.costs || [], (c) => c.date);
+    const costsBase = A.filterByPeriod(A.state.costs || [], (c) => c.date);
     let costsToRender = costsBase;
 
     if (filter !== "all") {
