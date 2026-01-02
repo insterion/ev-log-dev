@@ -1,8 +1,21 @@
-// ui-summary.js – Summary UI (compact + collapsible) + EV vs ICE quick view (clear labels)
+// ui-summary.js – Summary UI (compact + collapsible) + EV vs ICE quick view + "Open Compare"
 
 (function () {
   const U = window.EVUI || {};
   if (!U) return;
+
+  function goToCompare() {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("ev:goTab", { detail: { tab: "compare" } })
+      );
+    } catch (e) {
+      // fallback (older browsers)
+      const ev = document.createEvent("CustomEvent");
+      ev.initCustomEvent("ev:goTab", true, true, { tab: "compare" });
+      window.dispatchEvent(ev);
+    }
+  }
 
   function renderSummary(containerIds, summary, quickCompare) {
     const [idThis, idLast, idAvg] = containerIds.map((id) =>
@@ -96,6 +109,25 @@
         box.style.padding = "10px 12px";
         box.style.marginBottom = "10px";
         box.style.fontSize = "0.9rem";
+        box.style.cursor = "pointer";
+        box.setAttribute("role", "button");
+        box.setAttribute("tabindex", "0");
+
+        // tap anywhere in the box -> Compare
+        box.addEventListener("click", (e) => {
+          // ignore clicks on button inside (handled below)
+          const btn = e.target && e.target.closest && e.target.closest("button[data-action='go-compare']");
+          if (btn) return;
+          goToCompare();
+        });
+
+        // keyboard enter/space
+        box.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            goToCompare();
+          }
+        });
 
         if (idAvg.nextSibling) parent.insertBefore(box, idAvg.nextSibling);
         else parent.appendChild(box);
@@ -104,10 +136,22 @@
       if (!quickCompare || !quickCompare.hasData) {
         box.innerHTML = `
           <p style="margin:0;"><strong>EV vs ICE (quick view)</strong></p>
-          <p style="margin:6px 0 0;font-size:0.85rem;color:#b0b0b0;">
+          <p style="margin:6px 0 10px;font-size:0.85rem;color:#b0b0b0;">
             Not enough data yet.
           </p>
+          <button type="button" data-action="go-compare" style="margin-top:0;" class="primary">
+            Open Compare
+          </button>
         `;
+
+        const btn = box.querySelector("button[data-action='go-compare']");
+        if (btn) {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            goToCompare();
+          });
+        }
         return;
       }
 
@@ -127,16 +171,29 @@
           <span style="color:#b0b0b0;">(${quickCompare.perEnergyText})</span>
         </p>
 
-        <p style="margin:0;">
+        <p style="margin:0 0 10px;">
           All-in per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000EvAllIn)}</strong>,
           ICE <strong>${U.fmtGBP(quickCompare.per1000IceAllIn)}</strong>
           <span style="color:#b0b0b0;">(${quickCompare.perAllInText})</span>
         </p>
 
+        <button type="button" data-action="go-compare" class="primary">
+          Open Compare
+        </button>
+
         <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
-          All-in includes maintenance. For details, open <strong>Compare</strong>.
+          All-in includes maintenance.
         </p>
       `;
+
+      const btn = box.querySelector("button[data-action='go-compare']");
+      if (btn) {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          goToCompare();
+        });
+      }
     } catch (e) {
       console && console.warn && console.warn("summaryQuickCompare failed", e);
     }
