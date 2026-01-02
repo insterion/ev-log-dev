@@ -46,6 +46,18 @@
       b.addEventListener("click", () => activate(b.dataset.tab))
     );
 
+    // expose for other modules (optional)
+    window.EVTabs = { activate };
+
+    // listen for UI requests (e.g. Summary -> Compare)
+    window.addEventListener("ev:goTab", (ev) => {
+      const tab = ev && ev.detail && ev.detail.tab ? String(ev.detail.tab) : "";
+      if (!tab) return;
+      activate(tab);
+      // small UX: scroll to top of page
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) { window.scrollTo(0, 0); }
+    });
+
     activate("log");
   }
 
@@ -384,7 +396,6 @@
 
     const summary = C.buildSummary(state.entries);
 
-    // Compare data
     const cmp = C.buildCompare(state.entries, state.settings);
 
     const mt = computeMaintenanceTotals();
@@ -400,7 +411,6 @@
     cmp.insuranceOther = ins.other;
     cmp.insuranceTotal = ins.total;
 
-    // NEW: QuickCompare for Summary (clear energy vs all-in)
     const quickCompare = buildQuickCompare(cmp);
 
     U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary, quickCompare);
@@ -420,14 +430,9 @@
     let price = parseFloat($("price").value);
     const note = $("note").value.trim();
 
-    if (isNaN(kwh) || kwh <= 0) {
-      U.toast("Please enter kWh", "bad");
-      return;
-    }
+    if (isNaN(kwh) || kwh <= 0) return U.toast("Please enter kWh", "bad");
 
-    if (isNaN(price) || price <= 0) {
-      price = autoPriceForType(type);
-    }
+    if (isNaN(price) || price <= 0) price = autoPriceForType(type);
 
     if (!currentEditId) {
       const entry = {
@@ -469,10 +474,7 @@
   }
 
   function onSameAsLast() {
-    if (!state.entries.length) {
-      U.toast("No previous entry", "info");
-      return;
-    }
+    if (!state.entries.length) return U.toast("No previous entry", "info");
     const last = state.entries[state.entries.length - 1];
     $("date").value = last.date;
     $("kwh").value = last.kwh;
@@ -491,10 +493,7 @@
     const note = $("c_note").value.trim();
     const applies = getAppliesFromForm();
 
-    if (isNaN(amount) || amount <= 0) {
-      U.toast("Please enter amount", "bad");
-      return;
-    }
+    if (isNaN(amount) || amount <= 0) return U.toast("Please enter amount", "bad");
 
     if (!currentEditCostId) {
       const cost = {
@@ -541,8 +540,7 @@
     if (!id) return U.toast("Missing entry id", "bad");
     const idx = state.entries.findIndex((e) => e.id === id);
     if (idx === -1) return U.toast("Entry not found", "bad");
-    const ok = window.confirm("Delete this entry?");
-    if (!ok) return;
+    if (!window.confirm("Delete this entry?")) return;
 
     state.entries.splice(idx, 1);
     if (currentEditId === id) resetEditMode();
@@ -555,8 +553,7 @@
     if (!id) return U.toast("Missing cost id", "bad");
     const idx = state.costs.findIndex((c) => c.id === id);
     if (idx === -1) return U.toast("Cost not found", "bad");
-    const ok = window.confirm("Delete this cost?");
-    if (!ok) return;
+    if (!window.confirm("Delete this cost?")) return;
 
     state.costs.splice(idx, 1);
     if (currentEditCostId === id) resetCostEditMode();
