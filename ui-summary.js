@@ -1,4 +1,4 @@
-// ui-summary.js – Summary UI (compact + collapsible) + EV vs ICE quick view
+// ui-summary.js – Summary UI (compact + collapsible) + EV vs ICE quick view (clear labels)
 
 (function () {
   const U = window.EVUI || {};
@@ -21,7 +21,9 @@
         data.avgPrice && data.avgPrice > 0 ? `£${data.avgPrice.toFixed(3)}/kWh` : null;
 
       const perDay =
-        data.perDay && data.perDay > 0 ? (U.fmtGBP ? U.fmtGBP(data.perDay) : "£" + data.perDay.toFixed(2)) + "/day" : null;
+        data.perDay && data.perDay > 0
+          ? (U.fmtGBP ? U.fmtGBP(data.perDay) : "£" + data.perDay.toFixed(2)) + "/day"
+          : null;
 
       return `
         <p style="margin:0 0 4px;">
@@ -79,8 +81,7 @@
       </details>
     `;
 
-    // ---- EV vs ICE quick view (new, under Average) ----
-    // We insert after the avg container, so we don't need extra HTML ids in index.html.
+    // ---- EV vs ICE quick view (insert after Average) ----
     try {
       const parent = idAvg.parentNode;
       if (!parent) return;
@@ -89,7 +90,6 @@
       if (!box) {
         box = document.createElement("div");
         box.id = "summaryQuickCompare";
-        // mimic your card look (no need to touch styles.css)
         box.style.borderRadius = "18px";
         box.style.border = "1px solid #222";
         box.style.background = "#080808";
@@ -97,7 +97,6 @@
         box.style.marginBottom = "10px";
         box.style.fontSize = "0.9rem";
 
-        // insert right after #summary_avg block
         if (idAvg.nextSibling) parent.insertBefore(box, idAvg.nextSibling);
         else parent.appendChild(box);
       }
@@ -113,36 +112,33 @@
       }
 
       const diffAbs = Math.abs(quickCompare.diffAll || 0);
-      const diffText = quickCompare.diffText || "about the same";
+      const diffText = quickCompare.diffText || "about the same overall";
       const perText = quickCompare.perText || "about the same per 1000 miles";
 
+      // clearer labels so no “contradiction”
       box.innerHTML = `
         <p style="margin:0 0 6px;"><strong>EV vs ICE (quick view)</strong></p>
 
         <p style="margin:0 0 6px;">
-          All-in difference (ICE – EV):
-          <strong>${U.fmtGBP(diffAbs)}</strong>
+          All-in (ICE – EV): <strong>${U.fmtGBP(diffAbs)}</strong>
           <span style="color:#b0b0b0;">(${diffText})</span>
         </p>
 
         <p style="margin:0;">
-          Per 1000 miles:
-          EV <strong>${U.fmtGBP(quickCompare.per1000Ev || 0)}</strong>,
+          Energy per 1000 miles: EV <strong>${U.fmtGBP(quickCompare.per1000Ev || 0)}</strong>,
           ICE <strong>${U.fmtGBP(quickCompare.per1000Ice || 0)}</strong>
           <span style="color:#b0b0b0;">(${perText})</span>
         </p>
 
         <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
-          Tip: open <strong>Compare</strong> tab for full breakdown.
+          All-in includes maintenance. For details, open <strong>Compare</strong>.
         </p>
       `;
     } catch (e) {
-      // do not break summary if something goes wrong
       console && console.warn && console.warn("summaryQuickCompare failed", e);
     }
   }
 
-  // attach/override
   window.EVUI = window.EVUI || {};
   window.EVUI.renderSummary = renderSummary;
 })();
