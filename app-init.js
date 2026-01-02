@@ -1,4 +1,4 @@
-// app-init.js – wire tabs + wire everything once
+// app-init.js – wire tabs + wire everything once (with global tab activator)
 
 (function () {
   const A = window.EVApp;
@@ -13,6 +13,12 @@
     }
 
     btns.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tab)));
+
+    // expose for other modules (Summary -> Open Compare, etc.)
+    A.Tabs = {
+      activate
+    };
+
     activate("log");
   }
 
@@ -35,6 +41,27 @@
     s.chargerInstall = parseFloat(A.$("p_install").value) || 0;
     A.saveState();
     A.U.toast("Settings saved", "good");
+  }
+
+  // Global click handler for "open tab" buttons/links (e.g. Summary -> Compare)
+  function wireGlobalTabLinks() {
+    document.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (!t) return;
+
+      const el = t.closest("[data-open-tab]");
+      if (!el) return;
+
+      const tab = (el.getAttribute("data-open-tab") || "").trim();
+      if (!tab) return;
+
+      // prevent accidental form submits / link navigation
+      ev.preventDefault();
+
+      if (A.Tabs && typeof A.Tabs.activate === "function") {
+        A.Tabs.activate(tab);
+      }
+    });
   }
 
   function wire() {
@@ -63,9 +90,12 @@
     const costContainer = A.$("costTable");
     if (costContainer) costContainer.addEventListener("click", A.Actions.onCostTableClick);
 
+    // tabs + global tab links
+    wireTabs();
+    wireGlobalTabLinks();
+
     // initial UI
     syncSettingsToInputs();
-    wireTabs();
 
     A.Render.ensurePeriodControls();
     A.Render.ensureCostFilterControls();
