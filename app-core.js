@@ -24,7 +24,7 @@
   }
 
   function clampISO(d) {
-    return (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : "";
+    return (d && /^d{4}-d{2}-d{2}$/.test(d)) ? d : "";
   }
 
   function isoToTime(iso) {
@@ -70,7 +70,102 @@
     D.saveState(state);
   }
 
-  // Costs applies filter
+  // -------- Version 1.1: Compare defaults + diesel price history --------
+
+  function ensureCompareSettingsDefaults() {
+    if (!state.settings) state.settings = {};
+
+    if (typeof state.settings.evMilesPerKwh !== "number" || !isFinite(state.settings.evMilesPerKwh) || state.settings.evMilesPerKwh <= 0) {
+      state.settings.evMilesPerKwh = 2.8;
+    }
+
+    if (typeof state.settings.iceMpg !== "number" || !isFinite(state.settings.iceMpg) || state.settings.iceMpg <= 0) {
+      state.settings.iceMpg = 45;
+    }
+
+    // current diesel price (cached for UI); history is the source of truth
+    if (typeof state.settings.icePerLitre !== "number" || !isFinite(state.settings.icePerLitre) || state.settings.icePerLitre <= 0) {
+      state.settings.icePerLitre = 1.44;
+    }
+
+    const m = String(state.settings.bothAllocationMode || "split").toLowerCase();
+    state.settings.bothAllocationMode = (m === "split" || m === "double") ? m : "split";
+
+    ensureFuelHistoryDefaults();
+  }
+
+  function ensureFuelHistoryDefaults() {
+    if (!state.settings) state.settings = {};
+
+    if (!Array.isArray(state.settings.icePerLitreHistory)) {
+      state.settings.icePerLitreHistory = [];
+    }
+
+    if (state.settings.icePerLitreHistory.length === 0) {
+      state.settings.icePerLitreHistory.push({
+        from: todayISO(),
+        perLitre: Number(state.settings.icePerLitre) || 1.44
+      });
+    }
+
+    state.settings.icePerLitreHistory = state.settings.icePerLitreHistory
+      .map((x) => ({
+        from: (x && typeof x.from === "string") ? x.from.slice(0, 10) : "",
+        perLitre: (x && typeof x.perLitre === "number") ? x.perLitre : Number(x && x.perLitre)
+      }))
+      .filter((x) => x.from && /^d{4}-d{2}-d{2}$/.test(x.from) && isFinite(x.perLitre) && x.perLitre > 0)
+      .sort((a, b) => (a.from || "").localeCompare(b.from || ""));
+
+    // sync cached current price to latest
+    const last = state.settings.icePerLitreHistory[state.settings.icePerLitreHistory.length - 1];
+    if (last && isFinite(last.perLitre) && last.perLitre > 0) {
+      state.settings.icePerLitre = last.perLitre;
+    }
+  }
+
+  function getIcePerLitreForDate(isoDate) {
+    ensureFuelHistoryDefaults();
+    const hist = state.settings.icePerLitreHistory;
+
+    const d = (isoDate && typeof isoDate === "string") ? isoDate.slice(0, 10) : "";
+    if (!d) return Number(state.settings.icePerLitre) || 1.44;
+
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const h = hist[i];
+      if (h && h.from && h.from <= d) return Number(h.perLitre) || (Number(state.settings.icePerLitre) || 1.44);
+    }
+
+    const first = hist[0];
+    if (first && isFinite(first.perLitre) && first.perLitre > 0) return first.perLitre;
+
+    return Number(state.settings.icePerLitre) || 1.44;
+  }
+
+  function addIcePerLitreRecord(perLitre, fromISO) {
+    ensureFuelHistoryDefaults();
+
+    const p = Number(perLitre);
+    if (!isFinite(p) || p <= 0) return false;
+
+    const from = (fromISO && /^d{4}-d{2}-d{2}$/.test(fromISO)) ? fromISO : todayISO();
+    const hist = state.settings.icePerLitreHistory;
+
+    const last = hist[hist.length - 1];
+    if (last && last.from === from) {
+      last.perLitre = p;
+    } else {
+      hist.push({ from, perLitre: p });
+    }
+
+    ensureFuelHistoryDefaults();
+    return true;
+  }
+
+  // ensure defaults exist immediately after load
+  ensureCompareSettingsDefaults();
+
+  // -------- Costs applies filter --------
+
   function getCostFilterValue() {
     const sel = $("c_filter_applies");
     if (!sel) return "all";
@@ -78,7 +173,8 @@
     return (v === "ev" || v === "ice" || v === "both" || v === "other" || v === "all") ? v : "all";
   }
 
-  // Period logic
+  // -------- Period logic --------
+
   function getActivePeriod() {
     const mode = (state.ui.periodMode || "this-month").toLowerCase();
 
@@ -148,7 +244,7 @@
   window.EVApp = {
     D, C, U, $,
     state,
-    // edit ids
+
     get currentEditId() { return currentEditId; },
     set currentEditId(v) { currentEditId = v; },
     get currentEditCostId() { return currentEditCostId; },
@@ -160,6 +256,12 @@
     ensureCostAppliesDefaults,
     autoPriceForType,
     saveState,
+
+    // Version 1.1
+    ensureCompareSettingsDefaults,
+    ensureFuelHistoryDefaults,
+    getIcePerLitreForDate,
+    addIcePerLitreRecord,
 
     getCostFilterValue,
     getActivePeriod,
