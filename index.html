@@ -6,9 +6,7 @@
   <title>EV Log</title>
 
   <link rel="stylesheet" href="./styles.css" />
-
   <link rel="manifest" href="./manifest.json" />
-
 </head>
 <body>
 
@@ -87,15 +85,15 @@
       </select>
     </div>
 
-<div class="field">
-  <label for="c_applies">Applies to</label>
-  <select id="c_applies">
-    <option value="ev">EV</option>
-    <option value="ice">ICE</option>
-    <option value="both">Both</option>
-    <option value="other">Other</option>
-  </select>
-</div>
+    <div class="field">
+      <label for="c_applies">Applies to</label>
+      <select id="c_applies">
+        <option value="ev">EV</option>
+        <option value="ice">ICE</option>
+        <option value="both">Both</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
 
     <div class="section-block">
       <label>£ (amount)</label>
@@ -131,7 +129,7 @@
   </section>
 
   <!-- ================= SETTINGS TAB ================= -->
-      <section id="settings" class="tab">
+  <section id="settings" class="tab">
 
     <h2>Prices (£/kWh)</h2>
 
@@ -166,6 +164,37 @@
 
     <h2>EV vs ICE calculations</h2>
 
+    <!-- Version 1.1: Compare assumptions -->
+    <details id="compareAssumptions" open>
+      <summary>Assumptions (edit + save)</summary>
+
+      <div class="section-block">
+        <label>EV efficiency (mi/kWh)</label>
+        <input type="number" id="cmp_ev_mpkwh" step="0.1" inputmode="decimal" placeholder="2.8" />
+      </div>
+
+      <div class="section-block">
+        <label>ICE efficiency (MPG)</label>
+        <input type="number" id="cmp_ice_mpg" step="1" inputmode="decimal" placeholder="45" />
+      </div>
+
+      <div class="section-block">
+        <label>Diesel price (£/litre)</label>
+        <input type="number" id="cmp_diesel_per_litre" step="0.01" inputmode="decimal" placeholder="1.44" />
+      </div>
+
+      <div class="section-block">
+        <label>Shared costs (Both)</label>
+        <select id="cmp_both_mode">
+          <option value="split">Split 50/50 (recommended)</option>
+          <option value="double">Count in both (100% + 100%)</option>
+        </select>
+      </div>
+
+      <button id="cmp_save" type="button">Save compare settings</button>
+      <button id="cmp_reset" type="button">Reset compare defaults</button>
+    </details>
+
     <div id="compareStats"></div>
 
   </section>
@@ -174,21 +203,21 @@
 
   <!-- scripts -->
   <script src="data.js"></script>
-<script src="calc.js"></script>
+  <script src="calc.js"></script>
 
-<!-- новите разделени UI файлове -->
-<script src="ui-core.js"></script>
-<script src="ui-log.js"></script>
-<script src="ui-costs.js"></script>
-<script src="ui-summary.js"></script>
-<script src="ui-compare.js"></script>
+  <!-- новите разделени UI файлове -->
+  <script src="ui-core.js"></script>
+  <script src="ui-log.js"></script>
+  <script src="ui-costs.js"></script>
+  <script src="ui-summary.js"></script>
+  <script src="ui-compare.js"></script>
 
-<script src="app-core.js"></script>
-<script src="app-totals.js"></script>
-<script src="app-render.js"></script>
-<script src="app-actions.js"></script>
-<script src="app-export.js"></script>
-<script src="app-init.js"></script>
+  <script src="app-core.js"></script>
+  <script src="app-totals.js"></script>
+  <script src="app-render.js"></script>
+  <script src="app-actions.js"></script>
+  <script src="app-export.js"></script>
+  <script src="app-init.js"></script>
 
 </body>
 </html>
