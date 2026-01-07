@@ -233,13 +233,8 @@
     const p = A.getActivePeriod();
     const st = computeStatsForEntries(entriesForPeriod);
 
-    // Button: open Compare tab (works via app-init.js global listener)
     const openCompareBtn = `
-      <button
-        type="button"
-        data-open-tab="compare"
-        style="margin-top:8px;"
-      >Open Compare</button>
+      <button type="button" data-open-tab="compare" style="margin-top:8px;">Open Compare</button>
     `;
 
     box.innerHTML = `
@@ -265,9 +260,6 @@
           ${openCompareBtn}
         </div>
       </details>
-      <p style="margin:8px 0 0;font-size:0.85rem;color:#b0b0b0;">
-        Tip: Compare tab is still <strong>all-time</strong> for reliability.
-      </p>
     `;
   }
 
@@ -291,29 +283,18 @@
     const summary = A.C.buildSummary(A.state.entries);
     U.renderSummary(["summary_this", "summary_last", "summary_avg"], summary);
 
-    // Period summary
+    // Period summary (entries filtered by active period)
     ensurePeriodSummaryBlock();
     const entriesForPeriod = A.filterByPeriod(A.state.entries || [], (e) => e.date);
     renderPeriodSummary(entriesForPeriod);
 
-    // Compare all-time + totals
-    const cmp = A.C.buildCompare(A.state.entries, A.state.settings);
-
-    const mt = A.Totals.computeMaintenanceTotals();
-    cmp.maintEv = mt.ev;
-    cmp.maintIce = mt.ice;
-    cmp.maintBoth = mt.both;
-    cmp.maintOther = mt.other;
-
-    const ins = A.Totals.computeInsuranceTotals();
-    cmp.insuranceEv = ins.ev;
-    cmp.insuranceIce = ins.ice;
-    cmp.insuranceBoth = ins.both;
-    cmp.insuranceOther = ins.other;
-    cmp.insuranceTotal = ins.total;
+    // Compare v2 = active period + ICE miles input
+    const p = A.getActivePeriod(); // {mode, from, to, label}
+    const cmp = A.C.buildCompareV2(A.state, p);
 
     U.renderCompare("compareStats", cmp);
 
+    // keep existing totals blocks elsewhere
     A.Totals.renderMaintenanceTotalInCosts();
     A.Totals.renderMaintenanceTotalInCompare();
 
