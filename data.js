@@ -5,14 +5,31 @@
 
   const defaultState = {
     entries: [], // charging
-    costs: [],   // maintenance
+    costs: [], // maintenance
     settings: {
       public: 0.56,
       public_xp: 0.76,
       home: 0.09,
       home_xp: 0.30,
       chargerHardware: 0,
-      chargerInstall: 0
+      chargerInstall: 0,
+
+      // Compare assumptions (v1.1+)
+      evMilesPerKwh: 2.8,
+      iceMpg: 45,
+      icePerLitre: 1.44,
+      bothAllocationMode: "split",
+      icePerLitreHistory: [],
+
+      // Compare v2: ICE miles saved per period preset
+      iceMilesThisMonth: 0,
+      iceMilesLastMonth: 0,
+      iceMilesCustom: 0
+    },
+    ui: {
+      periodMode: "this-month",
+      periodFrom: "",
+      periodTo: ""
     }
   };
 
@@ -34,11 +51,7 @@
           console.warn("crypto.randomUUID not available, fallback id", err);
         }
         if (!newId) {
-          newId =
-            "e_" +
-            Date.now().toString(36) +
-            "_" +
-            (counter++).toString(36);
+          newId = "e_" + Date.now().toString(36) + "_" + (counter++).toString(36);
         }
         e.id = newId;
       }
@@ -59,53 +72,81 @@
           console.warn("crypto.randomUUID not available for costs, fallback id", err);
         }
         if (!newId) {
-          newId =
-            "c_" +
-            Date.now().toString(36) +
-            "_" +
-            (counter++).toString(36);
+          newId = "c_" + Date.now().toString(36) + "_" + (counter++).toString(36);
         }
         c.id = newId;
       }
     }
   }
 
-  // НОВО: гарантираме, че всеки разход има applies
-  // (ev | ice | both | other). За старите записи слагаме "other",
-  // за да не ги броим грешно в EV/ICE totals.
+  // guarantee each cost has applies (ev | ice | both | other)
   function ensureCostApplies(state) {
     if (!state || !Array.isArray(state.costs)) return;
     for (const c of state.costs) {
-      if (!c.applies) {
-        c.applies = "other";
-      }
+      if (!c.applies) c.applies = "other";
     }
+  }
+
+  function ensureUiDefaults(state) {
+    if (!state.ui) state.ui = {};
+    if (!state.ui.periodMode) state.ui.periodMode = "this-month";
+    if (state.ui.periodFrom == null) state.ui.periodFrom = "";
+    if (state.ui.periodTo == null) state.ui.periodTo = "";
+  }
+
+  function ensureSettingsDefaults(state) {
+    if (!state.settings) state.settings = {};
+
+    // merge-like defaults (only if missing)
+    const s = state.settings;
+
+    if (typeof s.public !== "number") s.public = 0.56;
+    if (typeof s.public_xp !== "number") s.public_xp = 0.76;
+    if (typeof s.home !== "number") s.home = 0.09;
+    if (typeof s.home_xp !== "number") s.home_xp = 0.30;
+
+    if (typeof s.chargerHardware !== "number") s.chargerHardware = 0;
+    if (typeof s.chargerInstall !== "number") s.chargerInstall = 0;
+
+    // compare assumptions
+    if (typeof s.evMilesPerKwh !== "number") s.evMilesPerKwh = 2.8;
+    if (typeof s.iceMpg !== "number") s.iceMpg = 45;
+    if (typeof s.icePerLitre !== "number") s.icePerLitre = 1.44;
+    if (!s.bothAllocationMode) s.bothAllocationMode = "split";
+    if (!Array.isArray(s.icePerLitreHistory)) s.icePerLitreHistory = [];
+
+    // v2: ICE miles per period
+    if (typeof s.iceMilesThisMonth !== "number") s.iceMilesThisMonth = 0;
+    if (typeof s.iceMilesLastMonth !== "number") s.iceMilesLastMonth = 0;
+    if (typeof s.iceMilesCustom !== "number") s.iceMilesCustom = 0;
   }
 
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return cloneDefault();
+
       const parsed = JSON.parse(raw);
-      // simple merge – ако липсва нещо, взимаме от default
+
+      // start from default then merge
       const state = cloneDefault();
       if (parsed.entries) state.entries = parsed.entries;
       if (parsed.costs) state.costs = parsed.costs;
-      if (parsed.settings) {
-        Object.assign(state.settings, parsed.settings);
-      }
+      if (parsed.settings) Object.assign(state.settings, parsed.settings);
+      if (parsed.ui) Object.assign(state.ui, parsed.ui);
 
-      // гарантираме, че всички entries и costs имат id (за Edit/Delete)
+      // migrations / guarantees
       ensureEntryIds(state);
       ensureCostIds(state);
-      // НОВО: гаранция за applies при разходите
       ensureCostApplies(state);
+      ensureSettingsDefaults(state);
+      ensureUiDefaults(state);
 
-      // по желание – записваме обратно, за да се запазят id-тата и applies
+      // persist back (keep ids, applies, and new defaults)
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch (e) {
-        console.warn("Could not persist migrated ids/applies", e);
+        console.warn("Could not persist migrated defaults/ids/applies", e);
       }
 
       return state;
