@@ -34,7 +34,7 @@
     return `
       <div style="margin-top:6px;padding:8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
         <p style="margin:0 0 6px;"><strong>${U.escapeHTML(title)}</strong></p>
-        ${rows}
+        ${rows || `<p style="margin:0;color:#b0b0b0;">No items.</p>`}
       </div>
     `;
   }
@@ -48,15 +48,11 @@
       return;
     }
 
-    const A = window.EVApp;
-    const C = window.EVCalc;
-
     const evMiles = Number(data.evMiles || 0);
     const iceMiles = Number(data.iceMiles || 0);
 
     const evTotal = Number(data.evTotal || 0);
     const iceTotal = Number(data.iceTotal || 0);
-
     const diffAll = iceTotal - evTotal;
 
     const evPerMile = evMiles > 0 ? (data.evPerMile ?? (evTotal / evMiles)) : 0;
@@ -90,7 +86,7 @@
       `;
     }
 
-    // ICE miles input (saved per period mode)
+    // ICE miles input (saved via "Save compare settings")
     const iceMilesBox = `
       <div style="margin:8px 0 10px;padding:8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
         <label style="display:block;margin-bottom:6px;">ICE miles (selected period)</label>
@@ -103,9 +99,8 @@
           value="${isFinite(iceMiles) ? iceMiles : 0}"
           style="width:100%;padding:10px;border-radius:12px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;"
         />
-        <button id="cmp_ice_miles_save" type="button" style="margin-top:8px;width:100%;">Save ICE miles</button>
         <p style="margin:6px 0 0;font-size:0.85rem;color:#b0b0b0;">
-          Saved separately per period preset (this-month / last-month / custom).
+          Save it with <strong>Save compare settings</strong>. Stored per period preset (this-month / last-month / custom).
         </p>
       </div>
     `;
@@ -185,22 +180,6 @@
         Assumptions: ICE ${data.iceMpg} mpg, £${Number(data.icePerLitre).toFixed(2)}/litre, EV ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh.
       </p>
     `;
-
-    // Wire the save button (after HTML is set)
-    const btn = document.getElementById("cmp_ice_miles_save");
-    if (btn && A && C) {
-      btn.onclick = () => {
-        const inp = document.getElementById("cmp_ice_miles_period");
-        const miles = inp ? Number(inp.value) : 0;
-
-        if (!A.state || !A.state.settings) return;
-
-        C.setIceMilesForPeriod(A.state.settings, A.state.ui && A.state.ui.periodMode, miles);
-        A.saveState();
-        A.Render.renderAll();
-        A.U.toast("ICE miles saved for this period", "good");
-      };
-    }
   }
 
   window.EVUI.renderCompare = renderCompare;
