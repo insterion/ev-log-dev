@@ -1,4 +1,4 @@
-// ui-compare.js – render compare (v2: period-aware + ICE miles per selected period)
+// ui-compare.js – render compare (v2: costs-only default; optional full mode)
 
 (function () {
   const U = window.EVUI;
@@ -17,8 +17,7 @@
     const entries = Object.entries(byCat || {});
     if (!entries.length) return "";
 
-    // stable order: common first, rest alpha
-    const preferred = ["Tyres", "Pads", "Service", "Other"];
+    const preferred = ["Tyres", "Pads", "Service", "Insurance", "Other"];
     entries.sort((a, b) => {
       const ai = preferred.indexOf(a[0]);
       const bi = preferred.indexOf(b[0]);
@@ -48,66 +47,26 @@
       return;
     }
 
-    const evMiles = Number(data.evMiles || 0);
-    const iceMiles = Number(data.iceMiles || 0);
+    const compareMode = String(data.compareMode || "costs-only").toLowerCase();
 
     const evTotal = Number(data.evTotal || 0);
     const iceTotal = Number(data.iceTotal || 0);
     const diffAll = iceTotal - evTotal;
 
-    const evPerMile = evMiles > 0 ? (data.evPerMile ?? (evTotal / evMiles)) : 0;
-    const icePerMile = iceMiles > 0 ? (data.icePerMile ?? (iceTotal / iceMiles)) : 0;
+    let allText = "about the same overall";
+    if (diffAll > 1) allText = "ICE more expensive overall";
+    else if (diffAll < -1) allText = "EV more expensive overall";
 
-    // Quick summary
-    let topSummary = "";
-    if (evMiles > 0 && iceMiles > 0) {
-      const per1000Ev = evPerMile * 1000;
-      const per1000Ice = icePerMile * 1000;
-      const per1000Diff = per1000Ice - per1000Ev;
-
-      let perText = "about the same per 1000 miles";
-      if (per1000Diff > 1) perText = "ICE more expensive per 1000 miles";
-      else if (per1000Diff < -1) perText = "EV more expensive per 1000 miles";
-
-      let allText = "about the same overall";
-      if (diffAll > 1) allText = "ICE more expensive overall";
-      else if (diffAll < -1) allText = "EV more expensive overall";
-
-      topSummary = `
-        <div style="margin-bottom:8px;padding:6px 8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
-          <p style="margin:0 0 4px;"><strong>Quick summary (selected period)</strong></p>
-          <p style="margin:0 0 3px;">
-            All-in difference (ICE – EV): <strong>${U.fmtGBP(Math.abs(diffAll))}</strong> (${allText})
-          </p>
-          <p style="margin:0;">
-            Per 1000 miles: EV <strong>${U.fmtGBP(per1000Ev)}</strong>, ICE <strong>${U.fmtGBP(per1000Ice)}</strong> (${perText})
-          </p>
-        </div>
-      `;
-    }
-
-    // ICE miles input (saved via "Save compare settings")
-    const iceMilesBox = `
-      <div style="margin:8px 0 10px;padding:8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
-        <label style="display:block;margin-bottom:6px;">ICE miles (selected period)</label>
-        <input
-          id="cmp_ice_miles_period"
-          type="number"
-          inputmode="decimal"
-          min="0"
-          step="1"
-          value="${isFinite(iceMiles) ? iceMiles : 0}"
-          style="width:100%;padding:10px;border-radius:12px;border:1px solid #2b2b2b;background:#0f0f0f;color:#fff;"
-        />
-        <p style="margin:6px 0 0;font-size:0.85rem;color:#b0b0b0;">
-          Save it with <strong>Save compare settings</strong>. Stored per period preset (this-month / last-month / custom).
+    const topSummary = `
+      <div style="margin-bottom:8px;padding:6px 8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
+        <p style="margin:0 0 4px;"><strong>Quick summary (selected period)</strong></p>
+        <p style="margin:0;">
+          All-in difference (ICE – EV): <strong>${U.fmtGBP(Math.abs(diffAll))}</strong> (${allText})
         </p>
       </div>
     `;
 
-    // Blocks
     const evEnergyCost = Number(data.evEnergyCost || 0);
-    const iceFuelCost = Number(data.iceFuelCost || 0);
 
     const maintEv = safeGet(data, ["maintenance", "ev", "total"], 0);
     const maintIce = safeGet(data, ["maintenance", "ice", "total"], 0);
@@ -119,19 +78,29 @@
     const insBoth = safeGet(data, ["insurance", "both", "total"], 0);
     const insOther = safeGet(data, ["insurance", "other", "total"], 0);
 
-    const energyBlock = `
+    const costsOnlyEnergyBlock = `
+      <details open>
+        <summary style="cursor:pointer;"><strong>EV energy (selected period)</strong></summary>
+        <div style="margin-top:6px;">
+          <p>Total kWh (period): <strong>${U.fmtNum(data.totalKwh, 1)}</strong></p>
+          <p>EV energy cost: <strong>${U.fmtGBP(evEnergyCost)}</strong></p>
+        </div>
+      </details>
+    `;
+
+    const fullEnergyBlock = `
       <details open>
         <summary style="cursor:pointer;"><strong>Energy vs ICE fuel (selected period)</strong></summary>
         <div style="margin-top:6px;">
           <p>Total kWh (period): <strong>${U.fmtNum(data.totalKwh, 1)}</strong></p>
-          <p>EV miles (estimated @ ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh): <strong>${U.fmtNum(evMiles, 0)}</strong></p>
-          <p>ICE miles (entered): <strong>${U.fmtNum(iceMiles, 0)}</strong></p>
+          <p>EV miles (estimated @ ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh): <strong>${U.fmtNum(data.evMiles || 0, 0)}</strong></p>
+          <p>ICE miles (entered): <strong>${U.fmtNum(data.iceMiles || 0, 0)}</strong></p>
 
           <p>EV energy cost: <strong>${U.fmtGBP(evEnergyCost)}</strong></p>
-          <p>ICE fuel cost (estimated): <strong>${U.fmtGBP(iceFuelCost)}</strong></p>
+          <p>ICE fuel cost (estimated): <strong>${U.fmtGBP(Number(data.iceFuelCost || 0))}</strong></p>
 
-          <p>EV £/mile (all-in): <strong>£${Number(evPerMile).toFixed(3)}</strong></p>
-          <p>ICE £/mile (all-in): <strong>£${Number(icePerMile).toFixed(3)}</strong></p>
+          <p>EV £/mile (all-in): <strong>£${Number(data.evPerMile || 0).toFixed(3)}</strong></p>
+          <p>ICE £/mile (all-in): <strong>£${Number(data.icePerMile || 0).toFixed(3)}</strong></p>
         </div>
       </details>
     `;
@@ -170,15 +139,17 @@
       `;
     }
 
+    const assumptionsLine =
+      compareMode === "full"
+        ? `Assumptions: ICE ${data.iceMpg} mpg, £${Number(data.icePerLitre || 0).toFixed(2)}/litre, EV ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh.`
+        : `Assumptions: Costs-only mode (no ICE fuel/miles). EV efficiency and diesel price are ignored.`;
+
     el.innerHTML = `
       ${topSummary}
-      ${iceMilesBox}
-      ${energyBlock}
+      ${compareMode === "full" ? fullEnergyBlock : costsOnlyEnergyBlock}
       ${maintBlock}
       ${insuranceBlock}
-      <p style="margin-top:10px;font-size:0.85rem;color:#b0b0b0;">
-        Assumptions: ICE ${data.iceMpg} mpg, £${Number(data.icePerLitre).toFixed(2)}/litre, EV ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh.
-      </p>
+      <p style="margin-top:10px;font-size:0.85rem;color:#b0b0b0;">${assumptionsLine}</p>
     `;
   }
 
