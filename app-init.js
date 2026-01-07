@@ -24,12 +24,46 @@
     if (!el) {
       const msg = `Init: element #${id} not found`;
       console && console.warn && console.warn(msg);
-      // only show toast for critical buttons, but keep it "info"
       if (opts && opts.toast) A.U.toast(msg, "info");
       return false;
     }
     el.addEventListener("click", fn);
     return true;
+  }
+
+  // ----- v2 helper: ICE miles per period preset -----
+  function getPeriodMode() {
+    return (A.state && A.state.ui && A.state.ui.periodMode) ? A.state.ui.periodMode : "this-month";
+  }
+
+  function syncIceMilesInputFromSettings() {
+    // This input exists only if you added it in ui-compare.js (id: cmp_ice_miles_period)
+    const inp = A.$("cmp_ice_miles_period");
+    if (!inp) return;
+
+    const s = A.state.settings || (A.state.settings = {});
+    if (window.EVCalc && typeof window.EVCalc.getIceMilesForPeriod === "function") {
+      const miles = window.EVCalc.getIceMilesForPeriod(s, getPeriodMode());
+      inp.value = Number(miles || 0);
+    }
+  }
+
+  function saveIceMilesInputToSettings() {
+    const inp = A.$("cmp_ice_miles_period");
+    if (!inp) return false;
+
+    const miles = Number(inp.value);
+    if (!isFinite(miles) || miles < 0) {
+      A.U.toast("Invalid ICE miles", "bad");
+      return false;
+    }
+
+    const s = A.state.settings || (A.state.settings = {});
+    if (window.EVCalc && typeof window.EVCalc.setIceMilesForPeriod === "function") {
+      window.EVCalc.setIceMilesForPeriod(s, getPeriodMode(), miles);
+      return true;
+    }
+    return false;
   }
 
   function syncSettingsToInputs() {
@@ -69,6 +103,9 @@
 
     const bothMode = A.$("cmp_both_mode");
     if (bothMode) bothMode.value = A.state.settings.bothAllocationMode || "split";
+
+    // v2: ICE miles per selected period
+    syncIceMilesInputFromSettings();
   }
 
   function saveSettingsFromInputs() {
@@ -86,7 +123,7 @@
     A.U.toast("Settings saved", "good");
   }
 
-  // Save compare assumptions + diesel price history
+  // Save compare assumptions + diesel price history (+ v2 ICE miles per period)
   function saveCompareSettingsFromInputs() {
     if (typeof A.ensureCompareSettingsDefaults === "function") {
       A.ensureCompareSettingsDefaults();
@@ -101,12 +138,18 @@
     if (isFinite(ev) && ev > 0) s.evMilesPerKwh = ev;
     if (isFinite(mpg) && mpg > 0) s.iceMpg = mpg;
 
+    // v2: save ICE miles for current period preset (if input exists)
+    saveIceMilesInputToSettings();
+
     // Diesel: append/overwrite today's record if changed
     if (isFinite(perL) && perL > 0 && typeof A.addIcePerLitreRecord === "function") {
       const current = Number(s.icePerLitre) || 0;
       if (Math.abs(perL - current) >= 0.005) {
         A.addIcePerLitreRecord(perL, A.todayISO());
       }
+    } else if (isFinite(perL) && perL > 0) {
+      // fallback: no history support
+      s.icePerLitre = perL;
     }
 
     const bm = ((A.$("cmp_both_mode") && A.$("cmp_both_mode").value) || "split").toLowerCase();
@@ -131,6 +174,12 @@
       s.icePerLitre = 1.44;
     }
 
+    // v2: reset ICE miles for current period preset (only if you have the input)
+    const inp = A.$("cmp_ice_miles_period");
+    if (inp && window.EVCalc && typeof window.EVCalc.setIceMilesForPeriod === "function") {
+      window.EVCalc.setIceMilesForPeriod(s, getPeriodMode(), 0);
+    }
+
     A.saveState();
     syncSettingsToInputs();
     A.Render.renderAll();
@@ -144,7 +193,6 @@
       btn.click(); // safest
       return true;
     }
-    // fallback
     if (A.Tabs && typeof A.Tabs.activate === "function") {
       A.Tabs.activate(tabName);
       return true;
@@ -168,12 +216,9 @@
       if (!tab) return;
 
       const ok = openTab(tab);
-      if (!ok) {
-        A.U.toast(`Tab "${tab}" not found`, "bad");
-      }
+      if (!ok) A.U.toast(`Tab "${tab}" not found`, "bad");
     };
 
-    // pointerup works better on mobile than click in some cases
     document.addEventListener("pointerup", handler, { capture: true });
     document.addEventListener("click", handler, { capture: true });
   }
@@ -190,7 +235,7 @@
     const appliesSelect = A.$("c_applies");
     if (appliesSelect && !appliesSelect.value) appliesSelect.value = "other";
 
-    // Core actions (keep working even if some buttons are missing)
+    // Core actions
     onClick("addEntry", A.Actions.onAddEntry, { toast: true });
     onClick("sameAsLast", A.Actions.onSameAsLast, { toast: false });
     onClick("c_add", A.Actions.onAddCost, { toast: true });
