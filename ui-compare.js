@@ -1,4 +1,4 @@
-// ui-compare.js – render compare (v2: costs-only default; optional full mode)
+// ui-compare.js – render compare (costs-only + ICE equivalent fuel for EV miles)
 
 (function () {
   const U = window.EVUI;
@@ -47,8 +47,6 @@
       return;
     }
 
-    const compareMode = String(data.compareMode || "costs-only").toLowerCase();
-
     const evTotal = Number(data.evTotal || 0);
     const iceTotal = Number(data.iceTotal || 0);
     const diffAll = iceTotal - evTotal;
@@ -57,11 +55,22 @@
     if (diffAll > 1) allText = "ICE more expensive overall";
     else if (diffAll < -1) allText = "EV more expensive overall";
 
+    const iceEqFuelCost = Number(data.iceEqFuelCost || 0);
+    const iceTotalPlusEqFuel = Number(data.iceTotalPlusEqFuel || (iceTotal + iceEqFuelCost));
+    const diffAllPlusFuel = iceTotalPlusEqFuel - evTotal;
+
+    let allTextPlus = "about the same overall";
+    if (diffAllPlusFuel > 1) allTextPlus = "ICE more expensive overall";
+    else if (diffAllPlusFuel < -1) allTextPlus = "EV more expensive overall";
+
     const topSummary = `
       <div style="margin-bottom:8px;padding:6px 8px;border-radius:12px;background:#0a0a0a;border:1px solid #222;">
         <p style="margin:0 0 4px;"><strong>Quick summary (selected period)</strong></p>
-        <p style="margin:0;">
+        <p style="margin:0 0 4px;">
           All-in difference (ICE – EV): <strong>${U.fmtGBP(Math.abs(diffAll))}</strong> (${allText})
+        </p>
+        <p style="margin:0;">
+          All-in + ICE fuel (same miles) (ICE – EV): <strong>${U.fmtGBP(Math.abs(diffAllPlusFuel))}</strong> (${allTextPlus})
         </p>
       </div>
     `;
@@ -78,7 +87,7 @@
     const insBoth = safeGet(data, ["insurance", "both", "total"], 0);
     const insOther = safeGet(data, ["insurance", "other", "total"], 0);
 
-    const costsOnlyEnergyBlock = `
+    const evEnergyBlock = `
       <details open>
         <summary style="cursor:pointer;"><strong>EV energy (selected period)</strong></summary>
         <div style="margin-top:6px;">
@@ -88,19 +97,17 @@
       </details>
     `;
 
-    const fullEnergyBlock = `
-      <details open>
-        <summary style="cursor:pointer;"><strong>Energy vs ICE fuel (selected period)</strong></summary>
+    const eqFuelBlock = `
+      <details>
+        <summary style="cursor:pointer;"><strong>ICE equivalent fuel for EV miles (estimate)</strong></summary>
         <div style="margin-top:6px;">
-          <p>Total kWh (period): <strong>${U.fmtNum(data.totalKwh, 1)}</strong></p>
-          <p>EV miles (estimated @ ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh): <strong>${U.fmtNum(data.evMiles || 0, 0)}</strong></p>
-          <p>ICE miles (entered): <strong>${U.fmtNum(data.iceMiles || 0, 0)}</strong></p>
-
-          <p>EV energy cost: <strong>${U.fmtGBP(evEnergyCost)}</strong></p>
-          <p>ICE fuel cost (estimated): <strong>${U.fmtGBP(Number(data.iceFuelCost || 0))}</strong></p>
-
-          <p>EV £/mile (all-in): <strong>£${Number(data.evPerMile || 0).toFixed(3)}</strong></p>
-          <p>ICE £/mile (all-in): <strong>£${Number(data.icePerMile || 0).toFixed(3)}</strong></p>
+          <p>EV estimated miles (@ ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh): <strong>${U.fmtNum(data.evMiles || 0, 0)}</strong></p>
+          <p>ICE MPG used: <strong>${U.fmtNum(data.iceMpg || 0, 0)}</strong></p>
+          <p>Diesel price used: <strong>£${Number(data.icePerLitre || 0).toFixed(2)}</strong> / litre</p>
+          <p>ICE fuel cost (same miles): <strong>${U.fmtGBP(iceEqFuelCost)}</strong></p>
+          <p style="margin:6px 0 0;font-size:0.85rem;color:#b0b0b0;">
+            This is fuel-only, for the same miles as EV estimated miles (no ICE odometer input).
+          </p>
         </div>
       </details>
     `;
@@ -139,14 +146,14 @@
       `;
     }
 
-    const assumptionsLine =
-      compareMode === "full"
-        ? `Assumptions: ICE ${data.iceMpg} mpg, £${Number(data.icePerLitre || 0).toFixed(2)}/litre, EV ${U.fmtNum(data.evMilesPerKwh, 1)} mi/kWh.`
-        : `Assumptions: Costs-only mode (no ICE fuel/miles). EV efficiency and diesel price are ignored.`;
+    const assumptionsLine = `
+      Assumptions: Costs-only totals (no ICE fuel/miles logged). Plus an extra ICE fuel estimate for EV miles using ICE mpg and £/litre.
+    `;
 
     el.innerHTML = `
       ${topSummary}
-      ${compareMode === "full" ? fullEnergyBlock : costsOnlyEnergyBlock}
+      ${evEnergyBlock}
+      ${eqFuelBlock}
       ${maintBlock}
       ${insuranceBlock}
       <p style="margin-top:10px;font-size:0.85rem;color:#b0b0b0;">${assumptionsLine}</p>
