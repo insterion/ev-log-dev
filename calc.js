@@ -1,4 +1,4 @@
-// calc.js – simple calculations
+// calc.js – simple calculations (with Compare v2: period-aware + ICE miles per period)
 
 (function () {
   function getMonthKey(dateStr) {
@@ -52,8 +52,7 @@
     if (thisArr) {
       thisMonth = monthTotals(thisArr);
       const dim = daysInMonthKey(thisKey);
-      thisMonth.avgPrice =
-        thisMonth.kwh > 0 ? thisMonth.cost / thisMonth.kwh : 0;
+      thisMonth.avgPrice = thisMonth.kwh > 0 ? thisMonth.cost / thisMonth.kwh : 0;
       thisMonth.perDay = dim > 0 ? thisMonth.cost / dim : 0;
     }
 
@@ -61,8 +60,7 @@
     if (lastArr) {
       lastMonth = monthTotals(lastArr);
       const dimL = daysInMonthKey(lastKey);
-      lastMonth.avgPrice =
-        lastMonth.kwh > 0 ? lastMonth.cost / lastMonth.kwh : 0;
+      lastMonth.avgPrice = lastMonth.kwh > 0 ? lastMonth.cost / lastMonth.kwh : 0;
       lastMonth.perDay = dimL > 0 ? lastMonth.cost / dimL : 0;
     }
 
@@ -79,6 +77,73 @@
     return { thisMonth, lastMonth, avg };
   }
 
+  // ---------- helpers for v2 ----------
+  function clampNum(x, def = 0) {
+    const n = Number(x);
+    return isFinite(n) ? n : def;
+  }
+
+  function inPeriod(dateStr, from, to) {
+    const d = (dateStr || "").slice(0, 10);
+    if (!d) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }
+
+  function filterByPeriod(arr, period, getDateFn) {
+    const from = period && period.from ? String(period.from).slice(0, 10) : "";
+    const to = period && period.to ? String(period.to).slice(0, 10) : "";
+    if (!from && !to) return (arr || []).slice();
+    return (arr || []).filter((x) => inPeriod(getDateFn(x), from, to));
+  }
+
+  // UK: miles / mpg = UK gallons; * 4.54609 litres per UK gallon
+  function iceFuelCostGBP(iceMiles, mpg, perLitre) {
+    const miles = clampNum(iceMiles, 0);
+    const m = clampNum(mpg, 0);
+    const p = clampNum(perLitre, 0);
+    if (miles <= 0 || m <= 0 || p <= 0) return 0;
+    const litres = (miles / m) * 4.54609;
+    return litres * p;
+  }
+
+  function sumByCategory(costsArr) {
+    const byCat = {};
+    let total = 0;
+
+    for (const c of costsArr || []) {
+      const amt = clampNum(c && c.amount, 0);
+      if (!amt) continue;
+
+      const catRaw = (c && c.category != null ? String(c.category) : "Other").trim();
+      const cat = catRaw || "Other";
+
+      byCat[cat] = (byCat[cat] || 0) + amt;
+      total += amt;
+    }
+
+    return { total, byCat };
+  }
+
+  function getIceMilesKey(periodMode) {
+    const m = String(periodMode || "").toLowerCase();
+    if (m === "this-month") return "iceMilesThisMonth";
+    if (m === "last-month") return "iceMilesLastMonth";
+    return "iceMilesCustom"; // custom + last-30 + all-time etc.
+  }
+
+  function getIceMilesForPeriod(settings, periodMode) {
+    const key = getIceMilesKey(periodMode);
+    return clampNum(settings && settings[key], 0);
+  }
+
+  function setIceMilesForPeriod(settings, periodMode, miles) {
+    const key = getIceMilesKey(periodMode);
+    if (settings) settings[key] = clampNum(miles, 0);
+  }
+
+  // ---------- Compare v1 (legacy): all-time, ICE fuel for EV miles ----------
   function buildCompare(entries, settings) {
     if (!entries.length) return null;
 
@@ -96,7 +161,6 @@
         ? settings.iceMpg
         : 45;
 
-    // current price (for UI). History is used for calculation when available.
     const icePerLitreCurrent =
       settings && typeof settings.icePerLitre === "number" && isFinite(settings.icePerLitre) && settings.icePerLitre > 0
         ? settings.icePerLitre
@@ -105,19 +169,20 @@
     const miles = totalKwh * evMilesPerKwh;
 
     // mpg (imperial) -> litres:
-    // miles / mpg = gallons, gallons * 4.546 = litres
+    // miles / mpg = gallons, gallons * 4.54609 = litres
     const gallons = iceMpg > 0 ? miles / iceMpg : 0;
-    const litres = gallons * 4.546;
+    const litres = gallons * 4.54609;
 
-    // Compute ICE cost using history per entry date (if available)
     let iceCost = null;
 
+    // Compute ICE cost using history per entry date (if available)
     if (settings && Array.isArray(settings.icePerLitreHistory) && settings.icePerLitreHistory.length) {
       const hist = settings.icePerLitreHistory
         .map((x) => ({
           from: (x && typeof x.from === "string") ? x.from.slice(0, 10) : "",
           perLitre: (x && typeof x.perLitre === "number") ? x.perLitre : Number(x && x.perLitre)
         }))
+        // FIX: proper date regex
         .filter((x) => x.from && /^d{4}-d{2}-d{2}$/.test(x.from) && isFinite(x.perLitre) && x.perLitre > 0)
         .sort((a, b) => (a.from || "").localeCompare(b.from || "")); // ascending
 
@@ -137,7 +202,7 @@
 
         const milesE = kwh * evMilesPerKwh;
         const gallonsE = iceMpg > 0 ? milesE / iceMpg : 0;
-        const litresE = gallonsE * 4.546;
+        const litresE = gallonsE * 4.54609;
 
         const p = getPriceForDate(e.date);
         return sum + litresE * p;
@@ -150,11 +215,7 @@
     const evPerMile = miles > 0 ? evCost / miles : 0;
     const icePerMile = miles > 0 ? iceCost / miles : 0;
 
-    // home charger payoff vs "everything at public rate"
-    const publicRate =
-      settings && typeof settings.public === "number"
-        ? settings.public
-        : 0;
+    const publicRate = settings && typeof settings.public === "number" ? settings.public : 0;
 
     let allPublicCost = null;
     let savedVsPublic = null;
@@ -164,14 +225,8 @@
       savedVsPublic = allPublicCost - evCost;
     }
 
-    const hw =
-      settings && typeof settings.chargerHardware === "number"
-        ? settings.chargerHardware
-        : 0;
-    const inst =
-      settings && typeof settings.chargerInstall === "number"
-        ? settings.chargerInstall
-        : 0;
+    const hw = settings && typeof settings.chargerHardware === "number" ? settings.chargerHardware : 0;
+    const inst = settings && typeof settings.chargerInstall === "number" ? settings.chargerInstall : 0;
     const chargerInvestment = hw + inst;
 
     let remainingToRecover = null;
@@ -197,8 +252,136 @@
     };
   }
 
+  // ---------- Compare v2: period-aware + ICE miles input ----------
+  function buildCompareV2(state, period) {
+    const entries = (state && Array.isArray(state.entries)) ? state.entries : [];
+    const costs = (state && Array.isArray(state.costs)) ? state.costs : [];
+    const settings = (state && state.settings) ? state.settings : {};
+    const ui = (state && state.ui) ? state.ui : {};
+
+    const periodMode = String(ui.periodMode || "this-month").toLowerCase();
+
+    const ent = filterByPeriod(entries, period, (e) => e.date);
+    const cs = filterByPeriod(costs, period, (c) => c.date);
+
+    // EV energy (real)
+    const totalKwh = ent.reduce((s, e) => s + clampNum(e && e.kwh, 0), 0);
+    const evEnergyCost = ent.reduce(
+      (s, e) => s + (clampNum(e && e.kwh, 0) * clampNum(e && e.price, 0)),
+      0
+    );
+
+    // Assumptions
+    const evMilesPerKwh =
+      (typeof settings.evMilesPerKwh === "number" && isFinite(settings.evMilesPerKwh) && settings.evMilesPerKwh > 0)
+        ? settings.evMilesPerKwh
+        : 2.8;
+
+    const iceMpg =
+      (typeof settings.iceMpg === "number" && isFinite(settings.iceMpg) && settings.iceMpg > 0)
+        ? settings.iceMpg
+        : 45;
+
+    const icePerLitre =
+      (typeof settings.icePerLitre === "number" && isFinite(settings.icePerLitre) && settings.icePerLitre > 0)
+        ? settings.icePerLitre
+        : 1.44;
+
+    // EV miles is estimated from EV kWh (because you log only EV energy)
+    const evMiles = totalKwh * evMilesPerKwh;
+
+    // ICE miles is user-provided per period
+    const iceMiles = getIceMilesForPeriod(settings, periodMode);
+
+    // ICE fuel is estimated from ICE miles
+    const iceFuelCost = iceFuelCostGBP(iceMiles, iceMpg, icePerLitre);
+
+    // Costs split (and separate Insurance for display)
+    const evCosts = cs.filter((c) => (c && c.applies) === "ev");
+    const iceCosts = cs.filter((c) => (c && c.applies) === "ice");
+    const bothCosts = cs.filter((c) => (c && c.applies) === "both");
+    const otherCosts = cs.filter((c) => (c && (c.applies === "other" || !c.applies)));
+
+    const isInsurance = (c) => String(c && c.category || "").toLowerCase() === "insurance";
+
+    const evMaint = sumByCategory(evCosts.filter((c) => !isInsurance(c)));
+    const iceMaint = sumByCategory(iceCosts.filter((c) => !isInsurance(c)));
+    const bothMaint = sumByCategory(bothCosts.filter((c) => !isInsurance(c)));
+    const otherMaint = sumByCategory(otherCosts.filter((c) => !isInsurance(c)));
+
+    const evIns = sumByCategory(evCosts.filter((c) => isInsurance(c)));
+    const iceIns = sumByCategory(iceCosts.filter((c) => isInsurance(c)));
+    const bothIns = sumByCategory(bothCosts.filter((c) => isInsurance(c)));
+    const otherIns = sumByCategory(otherCosts.filter((c) => isInsurance(c)));
+
+    // allocate "both"
+    const mode = String(settings.bothAllocationMode || "split").toLowerCase();
+    const bothToEach = (mode === "double") ? bothMaint.total : (bothMaint.total / 2);
+    const bothInsToEach = (mode === "double") ? bothIns.total : (bothIns.total / 2);
+
+    // IMPORTANT: "Other" participates (as you requested)
+    const evTotal =
+      evEnergyCost +
+      evMaint.total +
+      bothToEach +
+      otherMaint.total +
+      evIns.total +
+      bothInsToEach +
+      otherIns.total;
+
+    const iceTotal =
+      iceFuelCost +
+      iceMaint.total +
+      bothToEach +
+      otherMaint.total +
+      iceIns.total +
+      bothInsToEach +
+      otherIns.total;
+
+    const evPerMile = evMiles > 0 ? evTotal / evMiles : 0;
+    const icePerMile = iceMiles > 0 ? iceTotal / iceMiles : 0;
+
+    return {
+      periodMode,
+      totalKwh,
+      evEnergyCost,
+      evMilesPerKwh,
+      evMiles,
+
+      iceMiles,
+      iceFuelCost,
+      iceMpg,
+      icePerLitre,
+
+      maintenance: {
+        ev: evMaint,
+        ice: iceMaint,
+        both: bothMaint,
+        other: otherMaint,
+        bothAllocationMode: mode
+      },
+
+      insurance: {
+        ev: evIns,
+        ice: iceIns,
+        both: bothIns,
+        other: otherIns,
+        bothAllocationMode: mode
+      },
+
+      evTotal,
+      iceTotal,
+      evPerMile,
+      icePerMile
+    };
+  }
+
   window.EVCalc = {
     buildSummary,
-    buildCompare
+    buildCompare, // legacy
+    buildCompareV2, // v2
+    getIceMilesForPeriod,
+    setIceMilesForPeriod,
+    iceFuelCostGBP
   };
 })();
