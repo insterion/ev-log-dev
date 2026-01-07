@@ -1,9 +1,9 @@
-// calc.js – simple calculations (Compare: default costs-only; optional fuel+miles mode)
+// calc.js – simple calculations (Compare v2: costs-only + ICE equivalent fuel for EV miles)
 
 (function () {
   function getMonthKey(dateStr) {
     if (!dateStr) return "";
-    return dateStr.slice(0, 7); // "YYYY-MM"
+    return dateStr.slice(0, 7);
   }
 
   function groupByMonth(entries) {
@@ -96,12 +96,12 @@
   }
 
   // UK: miles / mpg = UK gallons; * 4.54609 litres per UK gallon
-  function iceFuelCostGBP(iceMiles, mpg, perLitre) {
-    const miles = clampNum(iceMiles, 0);
+  function iceFuelCostGBP(miles, mpg, perLitre) {
+    const mi = clampNum(miles, 0);
     const m = clampNum(mpg, 0);
     const p = clampNum(perLitre, 0);
-    if (miles <= 0 || m <= 0 || p <= 0) return 0;
-    const litres = (miles / m) * 4.54609;
+    if (mi <= 0 || m <= 0 || p <= 0) return 0;
+    const litres = (mi / m) * 4.54609;
     return litres * p;
   }
 
@@ -140,12 +140,6 @@
     if (settings) settings[key] = clampNum(miles, 0);
   }
 
-  function getCompareMode(settings) {
-    // default = costs-only (as requested)
-    const m = String(settings && settings.compareMode || "costs-only").toLowerCase();
-    return (m === "full") ? "full" : "costs-only";
-  }
-
   // ---------- Compare v1 (legacy) ----------
   function buildCompare(entries, settings) {
     if (!entries.length) return null;
@@ -169,6 +163,7 @@
         : 1.44;
 
     const miles = totalKwh * evMilesPerKwh;
+
     const gallons = iceMpg > 0 ? miles / iceMpg : 0;
     const litres = gallons * 4.54609;
 
@@ -180,7 +175,6 @@
           from: (x && typeof x.from === "string") ? x.from.slice(0, 10) : "",
           perLitre: (x && typeof x.perLitre === "number") ? x.perLitre : Number(x && x.perLitre)
         }))
-        // FIXED regex
         .filter((x) => x.from && /^d{4}-d{2}-d{2}$/.test(x.from) && isFinite(x.perLitre) && x.perLitre > 0)
         .sort((a, b) => (a.from || "").localeCompare(b.from || ""));
 
@@ -248,7 +242,7 @@
     };
   }
 
-  // ---------- Compare v2: period-aware (default costs-only) ----------
+  // ---------- Compare v2: costs-only totals + ICE equivalent fuel block ----------
   function buildCompareV2(state, period) {
     const entries = (state && Array.isArray(state.entries)) ? state.entries : [];
     const costs = (state && Array.isArray(state.costs)) ? state.costs : [];
@@ -260,14 +254,12 @@
     const ent = filterByPeriod(entries, period, (e) => e.date);
     const cs = filterByPeriod(costs, period, (c) => c.date);
 
-    // EV energy (real)
     const totalKwh = ent.reduce((s, e) => s + clampNum(e && e.kwh, 0), 0);
     const evEnergyCost = ent.reduce(
       (s, e) => s + (clampNum(e && e.kwh, 0) * clampNum(e && e.price, 0)),
       0
     );
 
-    // Assumptions (kept, even if not used in costs-only)
     const evMilesPerKwh =
       (typeof settings.evMilesPerKwh === "number" && isFinite(settings.evMilesPerKwh) && settings.evMilesPerKwh > 0)
         ? settings.evMilesPerKwh
@@ -283,16 +275,19 @@
         ? settings.icePerLitre
         : 1.44;
 
-    const compareMode = getCompareMode(settings);
+    const compareMode = "costs-only";
 
-    // EV miles estimate exists, but only meaningful in "full" mode (or if you later add EV odometer)
+    // EV miles estimate (used for ICE equivalent fuel calc)
     const evMiles = totalKwh * evMilesPerKwh;
 
-    // ICE miles/fuel only in full mode
-    const iceMiles = (compareMode === "full") ? getIceMilesForPeriod(settings, periodMode) : 0;
-    const iceFuelCost = (compareMode === "full") ? iceFuelCostGBP(iceMiles, iceMpg, icePerLitre) : 0;
+    // ICE equivalent fuel for SAME miles as EV estimate
+    const iceEqMiles = evMiles;
+    const iceEqFuelCost = iceFuelCostGBP(iceEqMiles, iceMpg, icePerLitre);
 
-    // Costs split (and separate Insurance for display)
+    // In costs-only totals: no ICE fuel/miles
+    const iceMiles = 0;
+    const iceFuelCost = 0;
+
     const evCosts = cs.filter((c) => (c && c.applies) === "ev");
     const iceCosts = cs.filter((c) => (c && c.applies) === "ice");
     const bothCosts = cs.filter((c) => (c && c.applies) === "both");
@@ -314,7 +309,6 @@
     const bothToEach = (mode === "double") ? bothMaint.total : (bothMaint.total / 2);
     const bothInsToEach = (mode === "double") ? bothIns.total : (bothIns.total / 2);
 
-    // "Other" participates (as you requested earlier)
     const evTotal =
       evEnergyCost +
       evMaint.total +
@@ -333,9 +327,7 @@
       bothInsToEach +
       otherIns.total;
 
-    // per-mile only meaningful in full mode
-    const evPerMile = (compareMode === "full" && evMiles > 0) ? (evTotal / evMiles) : 0;
-    const icePerMile = (compareMode === "full" && iceMiles > 0) ? (iceTotal / iceMiles) : 0;
+    const iceTotalPlusEqFuel = iceTotal + iceEqFuelCost;
 
     return {
       compareMode,
@@ -347,10 +339,16 @@
       evMilesPerKwh,
       evMiles,
 
+      // kept (legacy fields)
       iceMiles,
       iceFuelCost,
       iceMpg,
       icePerLitre,
+
+      // NEW: equivalent fuel based on EV estimated miles
+      iceEqMiles,
+      iceEqFuelCost,
+      iceTotalPlusEqFuel,
 
       maintenance: {
         ev: evMaint,
@@ -370,8 +368,9 @@
 
       evTotal,
       iceTotal,
-      evPerMile,
-      icePerMile
+
+      evPerMile: 0,
+      icePerMile: 0
     };
   }
 
@@ -379,7 +378,6 @@
     buildSummary,
     buildCompare,
     buildCompareV2,
-
     getIceMilesForPeriod,
     setIceMilesForPeriod,
     iceFuelCostGBP
