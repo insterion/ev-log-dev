@@ -14,14 +14,17 @@
       chargerHardware: 0,
       chargerInstall: 0,
 
-      // Compare assumptions (v1.1+)
+      // Compare assumptions
       evMilesPerKwh: 2.8,
       iceMpg: 45,
       icePerLitre: 1.44,
       bothAllocationMode: "split",
       icePerLitreHistory: [],
 
-      // Compare v2: ICE miles saved per period preset
+      // Compare mode (NEW): "costs-only" | "full"
+      compareMode: "costs-only",
+
+      // (legacy / optional) ICE miles per period preset
       iceMilesThisMonth: 0,
       iceMilesLastMonth: 0,
       iceMilesCustom: 0
@@ -44,15 +47,11 @@
       if (!e.id) {
         let newId = null;
         try {
-          if (window.crypto && window.crypto.randomUUID) {
-            newId = window.crypto.randomUUID();
-          }
+          if (window.crypto && window.crypto.randomUUID) newId = window.crypto.randomUUID();
         } catch (err) {
           console.warn("crypto.randomUUID not available, fallback id", err);
         }
-        if (!newId) {
-          newId = "e_" + Date.now().toString(36) + "_" + (counter++).toString(36);
-        }
+        if (!newId) newId = "e_" + Date.now().toString(36) + "_" + (counter++).toString(36);
         e.id = newId;
       }
     }
@@ -65,15 +64,11 @@
       if (!c.id) {
         let newId = null;
         try {
-          if (window.crypto && window.crypto.randomUUID) {
-            newId = window.crypto.randomUUID();
-          }
+          if (window.crypto && window.crypto.randomUUID) newId = window.crypto.randomUUID();
         } catch (err) {
           console.warn("crypto.randomUUID not available for costs, fallback id", err);
         }
-        if (!newId) {
-          newId = "c_" + Date.now().toString(36) + "_" + (counter++).toString(36);
-        }
+        if (!newId) newId = "c_" + Date.now().toString(36) + "_" + (counter++).toString(36);
         c.id = newId;
       }
     }
@@ -96,8 +91,6 @@
 
   function ensureSettingsDefaults(state) {
     if (!state.settings) state.settings = {};
-
-    // merge-like defaults (only if missing)
     const s = state.settings;
 
     if (typeof s.public !== "number") s.public = 0.56;
@@ -108,17 +101,23 @@
     if (typeof s.chargerHardware !== "number") s.chargerHardware = 0;
     if (typeof s.chargerInstall !== "number") s.chargerInstall = 0;
 
-    // compare assumptions
     if (typeof s.evMilesPerKwh !== "number") s.evMilesPerKwh = 2.8;
     if (typeof s.iceMpg !== "number") s.iceMpg = 45;
     if (typeof s.icePerLitre !== "number") s.icePerLitre = 1.44;
     if (!s.bothAllocationMode) s.bothAllocationMode = "split";
     if (!Array.isArray(s.icePerLitreHistory)) s.icePerLitreHistory = [];
 
-    // v2: ICE miles per period
+    // v2 ICE miles fields (optional)
     if (typeof s.iceMilesThisMonth !== "number") s.iceMilesThisMonth = 0;
     if (typeof s.iceMilesLastMonth !== "number") s.iceMilesLastMonth = 0;
     if (typeof s.iceMilesCustom !== "number") s.iceMilesCustom = 0;
+  }
+
+  // NEW: enforce compareMode
+  function ensureCompareMode(state) {
+    if (!state || !state.settings) return;
+    const raw = String(state.settings.compareMode || "").toLowerCase();
+    state.settings.compareMode = (raw === "full") ? "full" : "costs-only";
   }
 
   function loadState() {
@@ -128,21 +127,21 @@
 
       const parsed = JSON.parse(raw);
 
-      // start from default then merge
       const state = cloneDefault();
       if (parsed.entries) state.entries = parsed.entries;
       if (parsed.costs) state.costs = parsed.costs;
       if (parsed.settings) Object.assign(state.settings, parsed.settings);
       if (parsed.ui) Object.assign(state.ui, parsed.ui);
 
-      // migrations / guarantees
       ensureEntryIds(state);
       ensureCostIds(state);
       ensureCostApplies(state);
       ensureSettingsDefaults(state);
       ensureUiDefaults(state);
 
-      // persist back (keep ids, applies, and new defaults)
+      // NEW: compare mode migration
+      ensureCompareMode(state);
+
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch (e) {
