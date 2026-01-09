@@ -164,9 +164,8 @@
 
     <h2>EV vs ICE calculations</h2>
 
-    <!-- Compare assumptions -->
     <details id="compareAssumptions" open>
-      <summary>Assumptions (edit + save)</summary>
+      <summary>Assumptions (ICE fuel estimate + shared costs)</summary>
 
       <div class="section-block">
         <label>EV efficiency (mi/kWh)</label>
@@ -176,11 +175,6 @@
       <div class="section-block">
         <label>ICE efficiency (MPG)</label>
         <input type="number" id="cmp_ice_mpg" step="1" inputmode="decimal" placeholder="45" />
-      </div>
-
-      <div class="section-block">
-        <label>ICE miles (selected period)</label>
-        <input type="number" id="cmp_ice_miles_period" step="1" min="0" inputmode="decimal" placeholder="e.g. 800" />
       </div>
 
       <div class="section-block">
@@ -210,7 +204,6 @@
   <script src="data.js"></script>
   <script src="calc.js"></script>
 
-  <!-- новите разделени UI файлове -->
   <script src="ui-core.js"></script>
   <script src="ui-log.js"></script>
   <script src="ui-costs.js"></script>
