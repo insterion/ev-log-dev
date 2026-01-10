@@ -16,8 +16,8 @@
   // UI state defaults (period selector)
   if (!state.ui) state.ui = {};
   if (!state.ui.periodMode) state.ui.periodMode = "this-month";
-  if (!state.ui.periodFrom) state.ui.periodFrom = "";
-  if (!state.ui.periodTo) state.ui.periodTo = "";
+  if (state.ui.periodFrom == null) state.ui.periodFrom = "";
+  if (state.ui.periodTo == null) state.ui.periodTo = "";
 
   function todayISO() {
     return new Date().toISOString().slice(0, 10);
