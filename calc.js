@@ -175,7 +175,7 @@
           from: (x && typeof x.from === "string") ? x.from.slice(0, 10) : "",
           perLitre: (x && typeof x.perLitre === "number") ? x.perLitre : Number(x && x.perLitre)
         }))
-        .filter((x) => x.from && /^d{4}-d{2}-d{2}$/.test(x.from) && isFinite(x.perLitre) && x.perLitre > 0)
+        .filter((x) => x.from && /^\d{4}-\d{2}-\d{2}$/.test(x.from) && isFinite(x.perLitre) && x.perLitre > 0)
         .sort((a, b) => (a.from || "").localeCompare(b.from || ""));
 
       const getPriceForDate = (d) => {
