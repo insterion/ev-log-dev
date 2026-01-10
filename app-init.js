@@ -31,41 +31,6 @@
     return true;
   }
 
-  // ----- v2 helper: ICE miles per period preset -----
-  function getPeriodMode() {
-    return (A.state && A.state.ui && A.state.ui.periodMode) ? A.state.ui.periodMode : "this-month";
-  }
-
-  function syncIceMilesInputFromSettings() {
-    // This input exists only if you added it in ui-compare.js (id: cmp_ice_miles_period)
-    const inp = A.$("cmp_ice_miles_period");
-    if (!inp) return;
-
-    const s = A.state.settings || (A.state.settings = {});
-    if (window.EVCalc && typeof window.EVCalc.getIceMilesForPeriod === "function") {
-      const miles = window.EVCalc.getIceMilesForPeriod(s, getPeriodMode());
-      inp.value = Number(miles || 0);
-    }
-  }
-
-  function saveIceMilesInputToSettings() {
-    const inp = A.$("cmp_ice_miles_period");
-    if (!inp) return false;
-
-    const miles = Number(inp.value);
-    if (!isFinite(miles) || miles < 0) {
-      A.U.toast("Invalid ICE miles", "bad");
-      return false;
-    }
-
-    const s = A.state.settings || (A.state.settings = {});
-    if (window.EVCalc && typeof window.EVCalc.setIceMilesForPeriod === "function") {
-      window.EVCalc.setIceMilesForPeriod(s, getPeriodMode(), miles);
-      return true;
-    }
-    return false;
-  }
-
   function syncSettingsToInputs() {
     // Settings tab
     const s = A.state.settings || (A.state.settings = {});
@@ -103,9 +68,6 @@
 
     const bothMode = A.$("cmp_both_mode");
     if (bothMode) bothMode.value = A.state.settings.bothAllocationMode || "split";
-
-    // v2: ICE miles per selected period
-    syncIceMilesInputFromSettings();
   }
 
   function saveSettingsFromInputs() {
@@ -123,7 +85,7 @@
     A.U.toast("Settings saved", "good");
   }
 
-  // Save compare assumptions + diesel price history (+ v2 ICE miles per period)
+  // Save compare assumptions + diesel price history
   function saveCompareSettingsFromInputs() {
     if (typeof A.ensureCompareSettingsDefaults === "function") {
       A.ensureCompareSettingsDefaults();
@@ -137,9 +99,6 @@
 
     if (isFinite(ev) && ev > 0) s.evMilesPerKwh = ev;
     if (isFinite(mpg) && mpg > 0) s.iceMpg = mpg;
-
-    // v2: save ICE miles for current period preset (if input exists)
-    saveIceMilesInputToSettings();
 
     // Diesel: append/overwrite today's record if changed
     if (isFinite(perL) && perL > 0 && typeof A.addIcePerLitreRecord === "function") {
@@ -174,12 +133,6 @@
       s.icePerLitre = 1.44;
     }
 
-    // v2: reset ICE miles for current period preset (only if you have the input)
-    const inp = A.$("cmp_ice_miles_period");
-    if (inp && window.EVCalc && typeof window.EVCalc.setIceMilesForPeriod === "function") {
-      window.EVCalc.setIceMilesForPeriod(s, getPeriodMode(), 0);
-    }
-
     A.saveState();
     syncSettingsToInputs();
     A.Render.renderAll();
@@ -188,13 +141,19 @@
 
   // ULTRA-ROBUST openTab: click the real tab button if it exists
   function openTab(tabName) {
-    const btn = document.querySelector(`.tabbtn[data-tab="${tabName}"]`);
+    const name = String(tabName || "").trim();
+    if (!name) return false;
+
+    // safe escape (CSS.escape exists in modern browsers; fallback to raw)
+    const esc = (window.CSS && typeof window.CSS.escape === "function") ? window.CSS.escape(name) : name;
+    const btn = document.querySelector(`.tabbtn[data-tab="${esc}"]`);
+
     if (btn) {
-      btn.click(); // safest
+      btn.click();
       return true;
     }
     if (A.Tabs && typeof A.Tabs.activate === "function") {
-      A.Tabs.activate(tabName);
+      A.Tabs.activate(name);
       return true;
     }
     return false;
